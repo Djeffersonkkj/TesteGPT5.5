@@ -1,7 +1,7 @@
 import { createMapAreas, normalizeAreaId } from "./map";
 import { currentBananaProductionForDay } from "./economy";
 import { createReport } from "./reports";
-import { SPECIES_PROFILES } from "./constants";
+import { getDefaultSkillsForSpecies, getInitialStatsForSpecies } from "./skills";
 import type { Area, AreaId, GameState, Species } from "./types";
 import { syncAreaMonkeyVisibility } from "./utils";
 
@@ -104,10 +104,22 @@ function normalizeSavedGame(state: GameState): GameState {
           }
         : monkey.plannedAction;
 
+    const species = monkey.species as Species;
+    const stats = getInitialStatsForSpecies(species, Boolean(monkey.isLeader));
+    const wasAtFullHp = monkey.hp >= monkey.maxHp;
+
     return {
       ...monkey,
+      skills: getDefaultSkillsForSpecies(species),
       locationId,
-      foodConsumption: SPECIES_PROFILES[monkey.species as Species]?.foodConsumption ?? monkey.foodConsumption,
+      hp: wasAtFullHp ? stats.maxHp : Math.max(0, Math.min(monkey.hp, stats.maxHp)),
+      maxHp: stats.maxHp,
+      attack: stats.attack,
+      defense: stats.defense,
+      stealth: stats.stealth,
+      intelligence: stats.intelligence,
+      charisma: stats.charisma,
+      foodConsumption: stats.foodConsumption,
       plannedAction,
     };
   });

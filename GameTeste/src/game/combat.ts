@@ -1,5 +1,14 @@
 import { monkeyPortrait } from "./assets";
 import { GOLD_FACTION_ID, STONE_FACTION_ID } from "./constants";
+import {
+  getCombatTeamSupportBonus,
+  getFleeSkillBonus,
+  getGuardDamageReduction,
+  getMonkeyEffectiveStats,
+  getToolEfficiencyMultiplier,
+  hasSkill,
+  shouldAvoidDamage,
+} from "./skills";
 import type {
   CombatActionId,
   CombatEffect,
@@ -39,9 +48,12 @@ export interface CombatActionDefinition {
 
 export const COMBAT_ACTIONS: CombatActionDefinition[] = [
   { id: "attack", label: "Atacar", text: "Causa dano em um rival.", needsTarget: "enemy" },
+  { id: "ambush", label: "Emboscada", text: "Usa furtividade para causar dano e cansar um rival.", needsTarget: "enemy" },
   { id: "defend", label: "Defender", text: "Ganha defesa ate o proximo ataque inimigo." },
+  { id: "focusLeader", label: "Focar líder", text: "Pressiona o rival mais influente." },
   { id: "intimidate", label: "Intimidar", text: "Reduz moral inimiga e pode encerrar a luta." },
   { id: "flee", label: "Fugir", text: "Tenta sair do combate com perda de moral." },
+  { id: "surrender", label: "Negociar rendição", text: "Tenta encerrar a luta pela moral e carisma." },
   { id: "protect", label: "Proteger ferido", text: "Reduz dano recebido por um aliado.", needsTarget: "ally" },
   { id: "useTool", label: "Usar ferramenta", text: "Aplica uma ferramenta ou ervas se houver." },
   { id: "saveEnergy", label: "Poupar energia", text: "Recupera energia e ganha pequena defesa." },
@@ -62,6 +74,10 @@ function combatMonkeys(state: GameState, ids: string[]): Monkey[] {
 
 function activeMonkeys(state: GameState, ids: string[]): Monkey[] {
   return livingMonkeys(combatMonkeys(state, ids));
+}
+
+function combatParticipants(state: GameState, combat: PendingCombat): Monkey[] {
+  return combatMonkeys(state, [...combat.playerMonkeyIds, ...combat.enemyMonkeyIds]);
 }
 
 function alivePlayerMonkeys(state: GameState, combat: PendingCombat): Monkey[] {
@@ -105,44 +121,50 @@ export function buildCombatUnits(state: GameState): CombatUnit[] {
   };
 
   return [
-    ...players.map((monkey, index): CombatUnit => ({
-      id: monkey.id,
-      monkeyId: monkey.id,
-      name: monkey.name,
-      factionId: monkey.factionId,
-      team: "player",
-      hp: monkey.hp,
-      maxHp: monkey.maxHp,
-      energy: monkey.energy,
-      attack: monkey.attack,
-      defense: monkey.defense,
-      stealth: monkey.stealth,
-      charisma: monkey.charisma,
-      morale: monkey.morale,
-      position: { x: index > 2 ? 1 : 0, y: yFor(index % 3, players.length) },
-      hasActed: Boolean(combat.actedMonkeyIds?.includes(monkey.id)),
-      status: unitStatus(monkey, combat),
-      sprite: monkeyPortrait(state.monkeys.findIndex((item) => item.id === monkey.id)),
-    })),
-    ...enemies.map((monkey, index): CombatUnit => ({
-      id: monkey.id,
-      monkeyId: monkey.id,
-      name: monkey.name,
-      factionId: monkey.factionId,
-      team: "enemy",
-      hp: monkey.hp,
-      maxHp: monkey.maxHp,
-      energy: monkey.energy,
-      attack: monkey.attack,
-      defense: monkey.defense,
-      stealth: monkey.stealth,
-      charisma: monkey.charisma,
-      morale: monkey.morale,
-      position: { x: index > 2 ? 4 : 5, y: yFor(index % 3, enemies.length) },
-      hasActed: false,
-      status: unitStatus(monkey, combat),
-      sprite: monkeyPortrait(state.monkeys.findIndex((item) => item.id === monkey.id)),
-    })),
+    ...players.map((monkey, index): CombatUnit => {
+      const stats = getMonkeyEffectiveStats(monkey, { action: "attack", combatRound: combat.round });
+      return {
+        id: monkey.id,
+        monkeyId: monkey.id,
+        name: monkey.name,
+        factionId: monkey.factionId,
+        team: "player",
+        hp: monkey.hp,
+        maxHp: stats.maxHp,
+        energy: monkey.energy,
+        attack: stats.attack,
+        defense: stats.defense,
+        stealth: stats.stealth,
+        charisma: stats.charisma,
+        morale: monkey.morale,
+        position: { x: index > 2 ? 1 : 0, y: yFor(index % 3, players.length) },
+        hasActed: Boolean(combat.actedMonkeyIds?.includes(monkey.id)),
+        status: unitStatus(monkey, combat),
+        sprite: monkeyPortrait(state.monkeys.findIndex((item) => item.id === monkey.id)),
+      };
+    }),
+    ...enemies.map((monkey, index): CombatUnit => {
+      const stats = getMonkeyEffectiveStats(monkey, { action: "attack", combatRound: combat.round });
+      return {
+        id: monkey.id,
+        monkeyId: monkey.id,
+        name: monkey.name,
+        factionId: monkey.factionId,
+        team: "enemy",
+        hp: monkey.hp,
+        maxHp: stats.maxHp,
+        energy: monkey.energy,
+        attack: stats.attack,
+        defense: stats.defense,
+        stealth: stats.stealth,
+        charisma: stats.charisma,
+        morale: monkey.morale,
+        position: { x: index > 2 ? 4 : 5, y: yFor(index % 3, enemies.length) },
+        hasActed: false,
+        status: unitStatus(monkey, combat),
+        sprite: monkeyPortrait(state.monkeys.findIndex((item) => item.id === monkey.id)),
+      };
+    }),
   ];
 }
 
@@ -185,11 +207,32 @@ function chooseWeakest(monkeys: Monkey[]): Monkey {
   return [...monkeys].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
 }
 
-function calculateDamage(attacker: Monkey, target: Monkey, combat: PendingCombat, bonus = 0): number {
+function chooseLeaderTarget(monkeys: Monkey[]): Monkey {
+  return [...monkeys].sort(
+    (a, b) => Number(b.isLeader) - Number(a.isLeader) || b.charisma + b.morale / 10 - (a.charisma + a.morale / 10),
+  )[0];
+}
+
+function calculateDamage(state: GameState, attacker: Monkey, target: Monkey, combat: PendingCombat, bonus = 0): number {
+  if (shouldAvoidDamage(target)) {
+    return 0;
+  }
+  const participants = combatParticipants(state, combat);
+  const attackerStats = getMonkeyEffectiveStats(attacker, { action: "attack", combatRound: combat.round });
+  const targetStats = getMonkeyEffectiveStats(target, { action: "defend", combatRound: combat.round });
+  const teamSupport = getCombatTeamSupportBonus(participants, attacker.factionId);
   const defending = combat.defendingMonkeyIds?.includes(target.id) ? 2 : 0;
   const protectedBonus = combat.protectedMonkeyIds?.includes(target.id) ? 3 : 0;
   const variance = Math.floor(Math.random() * 3) - 1;
-  return Math.max(1, attacker.attack + bonus - Math.floor(target.defense * 0.45) - defending - protectedBonus + variance);
+  const rawDamage =
+    attackerStats.attack * (1 + teamSupport) +
+    bonus -
+    Math.floor(targetStats.defense * 0.45) -
+    defending -
+    protectedBonus +
+    variance;
+  const reduction = getGuardDamageReduction(target, participants);
+  return Math.max(1, Math.round(rawDamage * (1 - reduction)));
 }
 
 function applyDamage(target: Monkey, amount: number): number {
@@ -318,11 +361,63 @@ function applyAttack(state: GameState, combat: PendingCombat, actor: Monkey, tar
     pushCombatLog(combat, "Nao ha alvo valido para o ataque.");
     return;
   }
-  const damage = applyDamage(target, calculateDamage(actor, target, combat));
+  const damage = applyDamage(target, calculateDamage(state, actor, target, combat));
   actor.energy = clamp(actor.energy - 10, 0, actor.maxEnergy);
   updateMonkeyStatus(actor);
   pushCombatLog(combat, `${actor.name} atacou ${target.name} e causou ${damage} dano.`);
   setEffects(combat, [{ unitId: target.id, kind: "hit", text: `-${damage} HP` }]);
+}
+
+function applyAmbush(state: GameState, combat: PendingCombat, actor: Monkey, targetId?: string): void {
+  const target = targetId ? getMonkey(state, targetId) : chooseWeakest(aliveEnemyMonkeys(state, combat));
+  if (!target || target.status === "morto") {
+    pushCombatLog(combat, "Nao ha alvo valido para a emboscada.");
+    return;
+  }
+
+  const actorStats = getMonkeyEffectiveStats(actor, { action: "ambush", combatRound: combat.round });
+  const targetStats = getMonkeyEffectiveStats(target, { action: "defend", combatRound: combat.round });
+  const chance = clamp((actorStats.stealth - targetStats.stealth + actor.energy / 12) / 18, 0.22, 0.78);
+  actor.energy = clamp(actor.energy - 12, 0, actor.maxEnergy);
+
+  if (Math.random() > chance) {
+    pushCombatLog(combat, `${actor.name} tentou emboscar ${target.name}, mas perdeu o momento.`);
+    setEffects(combat, [{ unitId: target.id, kind: "miss", text: "falhou" }]);
+    return;
+  }
+
+  const damage = applyDamage(target, calculateDamage(state, actor, target, combat, 2));
+  target.energy = clamp(target.energy - 5, 0, target.maxEnergy);
+  updateMonkeyStatus(target);
+  updateMonkeyStatus(actor);
+  pushCombatLog(combat, `${actor.name} emboscou ${target.name} e causou ${damage} dano.`);
+  setEffects(combat, [{ unitId: target.id, kind: "hit", text: `-${damage} HP` }]);
+}
+
+function applyFocusLeader(state: GameState, combat: PendingCombat, actor: Monkey): void {
+  const target = chooseLeaderTarget(aliveEnemyMonkeys(state, combat));
+  const damage = applyDamage(target, calculateDamage(state, actor, target, combat, 1));
+  combat.enemyMorale = clamp((combat.enemyMorale ?? 60) - (target.isLeader ? 6 : 3), 0, 100);
+  actor.energy = clamp(actor.energy - 11, 0, actor.maxEnergy);
+  updateMonkeyStatus(actor);
+  pushCombatLog(combat, `${actor.name} focou ${target.name} e abalou a linha rival.`);
+  setEffects(combat, [{ unitId: target.id, kind: "hit", text: `-${damage} HP` }]);
+}
+
+function negotiateSurrender(state: GameState, combat: PendingCombat, actor: Monkey): void {
+  const stats = getMonkeyEffectiveStats(actor, { action: "negotiate", combatRound: combat.round });
+  const support = getCombatTeamSupportBonus(combatParticipants(state, combat), actor.factionId);
+  const pressure = Math.round((stats.charisma + actor.morale / 12 + Math.random() * 10) * (1 + support));
+  actor.energy = clamp(actor.energy - 7, 0, actor.maxEnergy);
+  combat.enemyMorale = clamp((combat.enemyMorale ?? 60) - Math.max(2, Math.floor(pressure / 3)), 0, 100);
+
+  if (pressure > (combat.enemyMorale ?? 60) + 8 && Math.random() < 0.45) {
+    finishAsSummary(state, combat, "surrender", "A conversa abriu uma rendicao antes que o combate piorasse.");
+    return;
+  }
+
+  pushCombatLog(combat, `${actor.name} tentou negociar rendicao. Moral inimiga: ${combat.enemyMorale}.`);
+  setEffects(combat, aliveEnemyMonkeys(state, combat).map((enemy) => ({ unitId: enemy.id, kind: "intimidate", text: "-moral" })));
 }
 
 function useTool(state: GameState, combat: PendingCombat, actor: Monkey): void {
@@ -330,6 +425,8 @@ function useTool(state: GameState, combat: PendingCombat, actor: Monkey): void {
   const tool = actor.inventory.shift() ?? (Object.entries(faction.inventory).find(([, count]) => (count ?? 0) > 0)?.[0] as ToolName | undefined);
   const enemies = aliveEnemyMonkeys(state, combat);
   const allies = alivePlayerMonkeys(state, combat);
+  const toolMultiplier = getToolEfficiencyMultiplier(actor);
+  const actorStats = getMonkeyEffectiveStats(actor, { action: "useTool", combatRound: combat.round });
 
   if (!tool && faction.food.herbs <= 0) {
     pushCombatLog(combat, `${actor.name} procurou uma ferramenta, mas nao havia nada pronto.`);
@@ -344,7 +441,7 @@ function useTool(state: GameState, combat: PendingCombat, actor: Monkey): void {
   if (!tool && faction.food.herbs > 0) {
     const target = chooseWeakest(allies);
     faction.food.herbs -= 1;
-    const healed = healMonkey(target, 4 + Math.floor(actor.charisma / 2));
+    const healed = healMonkey(target, Math.round((4 + Math.floor(actorStats.charisma / 2)) * toolMultiplier));
     pushCombatLog(combat, `${actor.name} usou ervas medicinais em ${target.name}.`);
     setEffects(combat, [{ unitId: target.id, kind: "heal", text: `+${healed} HP` }]);
     return;
@@ -353,7 +450,7 @@ function useTool(state: GameState, combat: PendingCombat, actor: Monkey): void {
   const toolName = String(tool);
 
   if (toolName.includes("Tambor") || toolName.includes("Mascara") || toolName.includes("Máscara")) {
-    const pressure = 8 + actor.charisma + Math.floor(Math.random() * 6);
+    const pressure = Math.round((8 + actorStats.charisma + Math.floor(Math.random() * 6)) * toolMultiplier);
     combat.enemyMorale = clamp((combat.enemyMorale ?? 60) - pressure, 0, 100);
     pushCombatLog(combat, `${actor.name} usou ${tool} para abalar a moral rival.`);
     setEffects(combat, enemies.map((enemy) => ({ unitId: enemy.id, kind: "intimidate", text: "-moral" })));
@@ -361,8 +458,9 @@ function useTool(state: GameState, combat: PendingCombat, actor: Monkey): void {
   }
 
   const target = chooseWeakest(enemies);
-  const bonus = toolName.includes("Catapulta") ? 5 : toolName.includes("Armadilha") ? 4 : toolName.includes("Lan") ? 3 : 2;
-  const damage = applyDamage(target, calculateDamage(actor, target, combat, bonus));
+  const baseBonus = toolName.includes("Catapulta") ? 5 : toolName.includes("Armadilha") ? 4 : toolName.includes("Lan") ? 3 : 2;
+  const bonus = Math.round(baseBonus * toolMultiplier);
+  const damage = applyDamage(target, calculateDamage(state, actor, target, combat, bonus));
   if (toolName.includes("Armadilha")) {
     target.energy = clamp(target.energy - 10, 0, target.maxEnergy);
     updateMonkeyStatus(target);
@@ -398,7 +496,7 @@ function runEnemyTurn(state: GameState, combat: PendingCombat): void {
     }
 
     const target = factionId === STONE_FACTION_ID ? chooseWeakest(players) : Math.random() < 0.65 ? chooseWeakest(players) : sample(players);
-    const damage = applyDamage(target, calculateDamage(enemy, target, combat, factionId === STONE_FACTION_ID ? 1 : 0));
+    const damage = applyDamage(target, calculateDamage(state, enemy, target, combat, factionId === STONE_FACTION_ID ? 1 : 0));
     enemy.energy = clamp(enemy.energy - 8, 0, enemy.maxEnergy);
     updateMonkeyStatus(enemy);
     pushCombatLog(combat, `${enemy.name} atacou ${target.name} e causou ${damage} dano.`);
@@ -448,6 +546,10 @@ export function performPlayerCombatAction(state: GameState, request: CombatActio
 
   if (request.action === "attack") {
     applyAttack(state, combat, actor, request.targetId);
+  } else if (request.action === "ambush") {
+    applyAmbush(state, combat, actor, request.targetId);
+  } else if (request.action === "focusLeader") {
+    applyFocusLeader(state, combat, actor);
   } else if (request.action === "defend") {
     addDefending(combat, actor.id);
     actor.energy = clamp(actor.energy + 4, 0, actor.maxEnergy);
@@ -455,7 +557,10 @@ export function performPlayerCombatAction(state: GameState, request: CombatActio
     pushCombatLog(combat, `${actor.name} firmou defesa.`);
     setEffects(combat, [{ unitId: actor.id, kind: "defend", text: "defesa" }]);
   } else if (request.action === "intimidate") {
-    const pressure = actor.charisma + Math.floor(actor.attack / 2) + Math.floor(Math.random() * 8);
+    const stats = getMonkeyEffectiveStats(actor, { action: "intimidate", combatRound: combat.round });
+    const support = getCombatTeamSupportBonus(combatParticipants(state, combat), actor.factionId);
+    const mandrillBonus = hasSkill(actor, "mandrill-intimidation") ? 3 + Math.floor(Math.random() * 6) : 0;
+    const pressure = Math.round((stats.charisma + Math.floor(stats.attack / 2) + Math.floor(Math.random() * 8)) * (1 + support)) + mandrillBonus;
     combat.enemyMorale = clamp((combat.enemyMorale ?? 60) - pressure, 0, 100);
     actor.energy = clamp(actor.energy - 7, 0, actor.maxEnergy);
     pushCombatLog(combat, `${actor.name} intimidou os rivais. Moral inimiga: ${combat.enemyMorale}.`);
@@ -464,10 +569,19 @@ export function performPlayerCombatAction(state: GameState, request: CombatActio
       finishAsSummary(state, combat, "enemyFled", "A moral inimiga quebrou e os rivais fugiram.");
       return state;
     }
+  } else if (request.action === "surrender") {
+    negotiateSurrender(state, combat, actor);
   } else if (request.action === "flee") {
     const players = alivePlayerMonkeys(state, combat);
     const area = getArea(state, combat.areaId);
-    const escapeChance = clamp((average(players.map((monkey) => monkey.stealth + monkey.energy / 18)) + area.stealthModifier * 2) / 18, 0.18, 0.78);
+    const escapeChance = clamp(
+      (average(players.map((monkey) => getMonkeyEffectiveStats(monkey, { action: "flee" }).stealth + monkey.energy / 18)) +
+        area.stealthModifier * 2) /
+        18 +
+        getFleeSkillBonus(players),
+      0.18,
+      0.82,
+    );
     if (Math.random() < escapeChance) {
       finishAsSummary(state, combat, "flee", "A tribo escapou por rotas laterais antes do cerco fechar.");
       return state;
@@ -492,6 +606,10 @@ export function performPlayerCombatAction(state: GameState, request: CombatActio
     addDefending(combat, actor.id);
     pushCombatLog(combat, `${actor.name} poupou energia e ficou em guarda.`);
     setEffects(combat, [{ unitId: actor.id, kind: "defend", text: "+energia" }]);
+  }
+
+  if (combat.result) {
+    return state;
   }
 
   markActed(combat, actor.id);

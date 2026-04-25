@@ -1,5 +1,6 @@
 import { ACTION_ROLE_HINT } from "./constants";
 import { canMoveToArea, normalizeAreaId } from "./map";
+import { getMonkeyEffectiveStats } from "./skills";
 import type { AreaId, GameState, GroupActionType, Role } from "./types";
 import { cloneState, getArea, getMonkey, livingFactionMonkeys, pushLog, syncAreaMonkeyVisibility, uid } from "./utils";
 
@@ -88,25 +89,26 @@ export function suggestMonkeysForAction(
 
   const score = (monkey: (typeof candidates)[number]): number => {
     const stable = monkey.energy / 18 + monkey.morale / 24;
+    const stats = getMonkeyEffectiveStats(monkey, { action: actionType });
     if (actionType === "collect") {
-      return monkey.intelligence * 1.4 + monkey.energy / 14 + monkey.stealth * 0.4;
+      return stats.intelligence * 1.4 + monkey.energy / 14 + stats.stealth * 0.4;
     }
     if (actionType === "explore") {
-      return monkey.stealth * 1.8 + monkey.intelligence + stable;
+      return stats.stealth * 1.8 + stats.intelligence + stable;
     }
     if (actionType === "attack") {
-      return monkey.attack * 1.6 + monkey.defense * 1.2 + monkey.hp + stable;
+      return stats.attack * 1.6 + stats.defense * 1.2 + monkey.hp + stable;
     }
     if (actionType === "negotiate" || actionType === "recruit") {
-      return monkey.charisma * 1.8 + monkey.morale / 12 + monkey.intelligence * 0.5;
+      return stats.charisma * 1.8 + monkey.morale / 12 + stats.intelligence * 0.5;
     }
     if (actionType === "steal") {
-      return monkey.stealth * 2 + monkey.intelligence + monkey.energy / 18;
+      return stats.stealth * 2 + stats.intelligence + monkey.energy / 18;
     }
     if (actionType === "patrol") {
-      return monkey.defense + monkey.intelligence + monkey.stealth * 0.6 + stable;
+      return stats.defense + stats.intelligence + stats.stealth * 0.6 + stable;
     }
-    return monkey.intelligence * 2 + monkey.energy / 18;
+    return stats.intelligence * 2 + monkey.energy / 18;
   };
 
   return candidates

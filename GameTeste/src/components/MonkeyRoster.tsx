@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ROLES } from "../game/constants";
 import { assignMonkeyRole, assignRoleToMany } from "../game/actions";
 import { normalizeAreaId } from "../game/map";
+import { getMonkeyEffectiveStats } from "../game/skills";
 import type { GameState, Monkey, Role } from "../game/types";
 
 interface Props {
@@ -181,6 +182,7 @@ export default function MonkeyRoster({
       <div className="monkey-grid">
         {filtered.map((monkey) => {
           const assigned = Boolean(monkey.plannedAction);
+          const stats = getMonkeyEffectiveStats(monkey);
           return (
             <article
               className={`monkey-card ${assigned ? "assigned" : "unassigned"} ${
@@ -209,10 +211,16 @@ export default function MonkeyRoster({
                 <span>{roleLabel(monkey)}</span>
               </div>
 
+              <div className="skill-list">
+                {(monkey.skills ?? []).slice(0, 3).map((skill) => (
+                  <span key={skill.id} title={skill.description}>{skill.name}</span>
+                ))}
+              </div>
+
               <div className="bar-list">
                 <div>
                   <span>HP</span>
-                  <meter min={0} max={monkey.maxHp} value={monkey.hp} />
+                  <meter min={0} max={stats.maxHp} value={monkey.hp} />
                   <b>{Math.ceil(monkey.hp)}</b>
                 </div>
                 <div>

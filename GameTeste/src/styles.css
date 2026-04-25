@@ -658,6 +658,22 @@ select {
   font-size: 0.78rem;
 }
 
+.skill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-list span {
+  border: 1px solid rgba(23, 111, 134, 0.24);
+  border-radius: 999px;
+  background: #edf8f4;
+  color: #23584c;
+  padding: 4px 7px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
 .bar-list {
   display: grid;
   grid-template-columns: 1fr 1fr;

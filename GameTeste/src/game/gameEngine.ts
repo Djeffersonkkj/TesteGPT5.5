@@ -1,10 +1,18 @@
 import { resolveEnemyAI } from "./ai";
-import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SPECIES_PROFILES, TOOLS } from "./constants";
+import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, TOOLS } from "./constants";
 import { applyCombatConsequences, performPlayerCombatAction, type CombatActionRequest } from "./combat";
 import { applyHungerAndRecovery, regenerateAreaFood, resolveDailyBananaProduction, summarizeFactionRelations } from "./economy";
 import { generatePendingDecisions } from "./events";
 import { normalizeAreaId } from "./map";
 import { createReport, ensureReportHasContent } from "./reports";
+import {
+  applyDailySkillEffects,
+  getDefaultSkillsForSpecies,
+  getGroupActionSkillMultiplier,
+  getInitialStatsForSpecies,
+  getMonkeyEffectiveStats,
+  hasSilentScout,
+} from "./skills";
 import type {
   DailyReport,
   AreaId,
@@ -60,25 +68,26 @@ function addToolToFaction(faction: Faction, tool: ToolName): void {
 
 function createRecruit(factionId: string, locationId: AreaId): Monkey {
   const species: Species = sample(["Chimpanzé", "Macaco-prego", "Gibão", "Mandril"]);
-  const profile = SPECIES_PROFILES[species];
+  const stats = getInitialStatsForSpecies(species);
   return {
     id: uid("monkey"),
     name: sample(PLAYER_NAMES),
     species,
+    skills: getDefaultSkillsForSpecies(species),
     factionId,
-    hp: profile.maxHp,
-    maxHp: profile.maxHp,
+    hp: stats.maxHp,
+    maxHp: stats.maxHp,
     energy: 60 + Math.floor(Math.random() * 25),
     maxEnergy: 100,
-    attack: profile.attack,
-    defense: profile.defense,
-    stealth: profile.stealth,
-    intelligence: profile.intelligence,
-    charisma: profile.charisma,
+    attack: stats.attack,
+    defense: stats.defense,
+    stealth: stats.stealth,
+    intelligence: stats.intelligence,
+    charisma: stats.charisma,
     loyalty: 48 + Math.floor(Math.random() * 24),
     morale: 45 + Math.floor(Math.random() * 24),
     hunger: 28,
-    foodConsumption: profile.foodConsumption,
+    foodConsumption: stats.foodConsumption,
     locationId,
     status: "normal",
     role: null,
@@ -108,11 +117,15 @@ function resolveGroupCollect(
   const faction = getFaction(state, state.playerFactionId);
   const members = groupMembers(state, plan);
   const toolBonus = members.some((monkey) => monkey.inventory.includes("Cesto de folhas")) ? 3 : 0;
-  const skill = members.reduce((sum, monkey) => sum + monkey.intelligence + monkey.energy / 18, 0);
+  const multiplier = getGroupActionSkillMultiplier(members, plan.actionType);
+  const skill = members.reduce((sum, monkey) => {
+    const stats = getMonkeyEffectiveStats(monkey, { action: "collect" });
+    return sum + stats.intelligence + monkey.energy / 18;
+  }, 0);
   const dangerPenalty = Math.max(0, area.dangerLevel - 3);
   const amount = Math.max(
     0,
-    Math.min(area.currentFood, Math.floor(skill / 4 + toolBonus + Math.random() * 4 - dangerPenalty)),
+    Math.min(area.currentFood, Math.floor((skill / 4 + toolBonus) * multiplier + Math.random() * 4 - dangerPenalty)),
   );
 
   area.currentFood -= amount;
@@ -142,7 +155,11 @@ function resolveGroupExplore(
 ): void {
   const area = getArea(state, plan.areaId);
   const members = groupMembers(state, plan);
-  const skill = members.reduce((sum, monkey) => sum + monkey.stealth + monkey.intelligence, 0);
+  const multiplier = getGroupActionSkillMultiplier(members, plan.actionType);
+  const skill = members.reduce((sum, monkey) => {
+    const stats = getMonkeyEffectiveStats(monkey, { action: "explore" });
+    return sum + stats.stealth + stats.intelligence;
+  }, 0) * multiplier;
   area.knownByPlayer = true;
   members.forEach((monkey) => {
     monkey.locationId = area.id;
@@ -150,7 +167,11 @@ function resolveGroupExplore(
   spendEnergy(members, 12 + Math.floor(area.dangerLevel / 2));
 
   report.confirmed.push(`${members.length} explorador(es) mapearam ${area.name}.`);
-  report.rumors.push(`${area.specialFeature}`);
+  if (hasSilentScout(members) && roll(0.55)) {
+    report.confirmed.push(`${area.specialFeature}`);
+  } else {
+    report.rumors.push(`${area.specialFeature}`);
+  }
 
   if (area.hiddenMonkeyIds.length > 0 || skill > 26) {
     const hidden = area.hiddenMonkeyIds.length;
@@ -196,7 +217,11 @@ function resolveGroupNegotiate(
     return;
   }
 
-  const charisma = members.reduce((sum, monkey) => sum + monkey.charisma + monkey.morale / 20, 0);
+  const multiplier = getGroupActionSkillMultiplier(members, plan.actionType);
+  const charisma = members.reduce((sum, monkey) => {
+    const stats = getMonkeyEffectiveStats(monkey, { action: "negotiate" });
+    return sum + stats.charisma + monkey.morale / 20;
+  }, 0) * multiplier;
   const relation = relationBetween(state, state.playerFactionId, targetFactionId);
   const target = getFaction(state, targetFactionId);
   members.forEach((monkey) => {
@@ -234,7 +259,11 @@ function resolveGroupSteal(
   }
 
   const target = getFaction(state, targetFactionId);
-  const stealth = members.reduce((sum, monkey) => sum + monkey.stealth + monkey.energy / 25, 0) + area.stealthModifier * 3;
+  const multiplier = getGroupActionSkillMultiplier(members, plan.actionType);
+  const stealth = members.reduce((sum, monkey) => {
+    const stats = getMonkeyEffectiveStats(monkey, { action: "steal" });
+    return sum + stats.stealth + monkey.energy / 25;
+  }, 0) * multiplier + area.stealthModifier * 3;
   const defense =
     livingFactionMonkeys(state, targetFactionId)
       .filter((monkey) => monkey.locationId === area.id)
@@ -268,7 +297,11 @@ function resolveGroupRecruit(
 ): void {
   const area = getArea(state, plan.areaId);
   const members = groupMembers(state, plan);
-  const charisma = members.reduce((sum, monkey) => sum + monkey.charisma + monkey.morale / 25, 0);
+  const multiplier = getGroupActionSkillMultiplier(members, plan.actionType);
+  const charisma = members.reduce((sum, monkey) => {
+    const stats = getMonkeyEffectiveStats(monkey, { action: "recruit" });
+    return sum + stats.charisma + monkey.morale / 25;
+  }, 0) * multiplier;
   const food = foodTotal(getFaction(state, state.playerFactionId));
   const caveBonus = area.id === "caverna" ? 12 : 0;
   members.forEach((monkey) => {
@@ -292,7 +325,11 @@ function resolveGroupCraft(
 ): void {
   const members = groupMembers(state, plan);
   const faction = getFaction(state, state.playerFactionId);
-  const skill = members.reduce((sum, monkey) => sum + monkey.intelligence + monkey.energy / 30, 0);
+  const multiplier = getGroupActionSkillMultiplier(members, plan.actionType);
+  const skill = members.reduce((sum, monkey) => {
+    const stats = getMonkeyEffectiveStats(monkey, { action: "craft" });
+    return sum + stats.intelligence + monkey.energy / 30;
+  }, 0) * multiplier;
   spendEnergy(members, 10);
 
   if (skill + Math.random() * 12 > 18) {
@@ -344,7 +381,8 @@ function processRoleAssignments(state: GameState, report: DailyReport): void {
 
     if (monkey.role === "Coletor") {
       const area = getArea(state, monkey.locationId);
-      const amount = Math.max(0, Math.min(area.currentFood, Math.floor(monkey.intelligence / 2 + Math.random() * 3)));
+      const stats = getMonkeyEffectiveStats(monkey, { action: "collect" });
+      const amount = Math.max(0, Math.min(area.currentFood, Math.floor(stats.intelligence / 2 + Math.random() * 3)));
       area.currentFood -= amount;
       faction.food.bananas += amount;
       spendEnergy([monkey], 8 + Math.floor(area.dangerLevel / 2));
@@ -362,17 +400,19 @@ function processRoleAssignments(state: GameState, report: DailyReport): void {
       monkey.morale = clamp(monkey.morale + 2, 0, 100);
     } else if (monkey.role === "Curandeiro") {
       const patient = player.find((ally) => ally.hp < ally.maxHp && ally.status !== "morto");
+      const stats = getMonkeyEffectiveStats(monkey);
       spendEnergy([monkey], 6);
       if (patient && faction.food.herbs > 0) {
         faction.food.herbs -= 1;
-        patient.hp = clamp(patient.hp + 4 + Math.floor(monkey.intelligence / 3), 0, patient.maxHp);
+        patient.hp = clamp(patient.hp + 4 + Math.floor(stats.intelligence / 3), 0, patient.maxHp);
         patient.morale = clamp(patient.morale + 4, 0, 100);
         updateMonkeyStatus(patient);
         report.confirmed.push(`${monkey.name} tratou os ferimentos de ${patient.name}.`);
       }
     } else if (monkey.role === "Artesão") {
+      const stats = getMonkeyEffectiveStats(monkey, { action: "craft" });
       spendEnergy([monkey], 8);
-      if (monkey.intelligence + Math.random() * 10 > 12) {
+      if (stats.intelligence + Math.random() * 10 > 12) {
         const tool = sample(TOOLS);
         addToolToFaction(faction, tool);
         monkey.inventory.push(tool);
@@ -382,9 +422,10 @@ function processRoleAssignments(state: GameState, report: DailyReport): void {
       const target = state.factions
         .filter((item) => !item.isPlayer && item.alive)
         .sort((a, b) => (b.relations[state.playerFactionId] ?? 0) - (a.relations[state.playerFactionId] ?? 0))[0];
+      const stats = getMonkeyEffectiveStats(monkey, { action: "negotiate" });
       spendEnergy([monkey], 6);
       if (target) {
-        changeRelation(state, state.playerFactionId, target.id, monkey.charisma > 5 ? 4 : 2);
+        changeRelation(state, state.playerFactionId, target.id, stats.charisma > 5 ? 4 : 2);
         report.rumors.push(`${monkey.name} espalhou palavras de paz para ${target.name}.`);
       }
     }
@@ -811,6 +852,7 @@ function continueAfterResolution(state: GameState, report: DailyReport): GameSta
 export function finalizeDay(state: GameState, report: DailyReport): GameState {
   resolveDailyBananaProduction(state, report);
   applyHungerAndRecovery(state, report);
+  state = applyDailySkillEffects(state, report);
   summarizeFactionRelations(state, report);
 
   state.factions.forEach((faction) => {

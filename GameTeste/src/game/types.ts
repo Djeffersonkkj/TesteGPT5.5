@@ -5,6 +5,34 @@ export type Species =
   | "Mandril"
   | "Gibão";
 
+export type MonkeySpecies = Species;
+
+export interface MonkeyStats {
+  maxHp: number;
+  attack: number;
+  defense: number;
+  stealth: number;
+  intelligence: number;
+  charisma: number;
+  morale: number;
+  foodConsumption: number;
+}
+
+export type SkillEffect = {
+  stat?: keyof MonkeyStats;
+  modifierType: "flat" | "percent";
+  value: number;
+  condition?: string;
+};
+
+export type MonkeySkill = {
+  id: string;
+  name: string;
+  description: string;
+  trigger: "passive" | "combat" | "daily" | "support" | "exploration" | "food";
+  effects: SkillEffect[];
+};
+
 export type Terrain =
   | "floresta"
   | "pântano"
@@ -170,6 +198,7 @@ export interface Monkey {
   id: string;
   name: string;
   species: Species;
+  skills: MonkeySkill[];
   factionId: string;
   hp: number;
   maxHp: number;
@@ -256,9 +285,12 @@ export interface PendingCombat {
 
 export type CombatActionId =
   | "attack"
+  | "ambush"
   | "defend"
+  | "focusLeader"
   | "intimidate"
   | "flee"
+  | "surrender"
   | "protect"
   | "useTool"
   | "saveEnergy";

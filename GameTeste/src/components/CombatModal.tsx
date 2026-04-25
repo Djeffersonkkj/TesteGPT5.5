@@ -215,6 +215,8 @@ export default function CombatModal({ state, onAction, onConfirmSummary }: Props
   const targetHint =
     selectedAction === "attack"
       ? "Escolha um inimigo no campo."
+      : selectedAction === "ambush"
+        ? "Escolha um inimigo para emboscar."
       : selectedAction === "protect"
         ? "Escolha um aliado para proteger."
         : "";

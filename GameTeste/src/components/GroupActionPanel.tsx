@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { GROUP_ACTION_LABELS } from "../game/constants";
 import { addGroupPlan, removeGroupPlan, suggestMonkeysForAction } from "../game/actions";
 import { normalizeAreaId } from "../game/map";
+import { getMonkeyEffectiveStats } from "../game/skills";
 import type { GameState, GroupActionType } from "../game/types";
 import { livingFactionMonkeys } from "../game/utils";
 
@@ -80,19 +81,22 @@ export default function GroupActionPanel({ state, onChange }: Props) {
       </div>
 
       <div className="compact-picker">
-        {available.map((monkey) => (
-          <label key={monkey.id} className={selectedIds.includes(monkey.id) ? "picked" : ""}>
-            <input
-              checked={selectedIds.includes(monkey.id)}
-              type="checkbox"
-              onChange={() => toggle(monkey.id)}
-            />
-            <span>{monkey.name}</span>
-            <small>
-              ATQ {monkey.attack} · FUR {monkey.stealth} · CAR {monkey.charisma}
-            </small>
-          </label>
-        ))}
+        {available.map((monkey) => {
+          const stats = getMonkeyEffectiveStats(monkey, { action: actionType });
+          return (
+            <label key={monkey.id} className={selectedIds.includes(monkey.id) ? "picked" : ""}>
+              <input
+                checked={selectedIds.includes(monkey.id)}
+                type="checkbox"
+                onChange={() => toggle(monkey.id)}
+              />
+              <span>{monkey.name}</span>
+              <small>
+                ATQ {stats.attack} · FUR {stats.stealth} · CAR {stats.charisma}
+              </small>
+            </label>
+          );
+        })}
       </div>
 
       <button

@@ -3,11 +3,11 @@ import {
   GOLD_FACTION_ID,
   PLAYER_FACTION_ID,
   PLAYER_NAMES,
-  SPECIES_PROFILES,
   STONE_FACTION_ID,
 } from "./constants";
 import { createMapAreas } from "./map";
 import { createReport } from "./reports";
+import { getDefaultSkillsForSpecies, getInitialStatsForSpecies } from "./skills";
 import type { AreaId, Faction, FoodStock, GameState, Monkey, Species } from "./types";
 import { syncAreaMonkeyVisibility, uid } from "./utils";
 
@@ -83,27 +83,27 @@ function createMonkey(
   locationId: AreaId,
   isLeader = false,
 ): Monkey {
-  const profile = SPECIES_PROFILES[species];
-  const leaderBonus = isLeader ? 2 : 0;
+  const stats = getInitialStatsForSpecies(species, isLeader);
 
   return {
     id: uid("monkey"),
     name,
     species,
+    skills: getDefaultSkillsForSpecies(species),
     factionId,
-    hp: profile.maxHp + leaderBonus,
-    maxHp: profile.maxHp + leaderBonus,
+    hp: stats.maxHp,
+    maxHp: stats.maxHp,
     energy: 82 + Math.floor(Math.random() * 12),
     maxEnergy: 100,
-    attack: profile.attack + (isLeader ? 1 : 0),
-    defense: profile.defense + (isLeader ? 1 : 0),
-    stealth: profile.stealth,
-    intelligence: profile.intelligence + (isLeader ? 1 : 0),
-    charisma: profile.charisma + (isLeader ? 2 : 0),
+    attack: stats.attack,
+    defense: stats.defense,
+    stealth: stats.stealth,
+    intelligence: stats.intelligence,
+    charisma: stats.charisma,
     loyalty: isLeader ? 100 : 55 + Math.floor(Math.random() * 25),
     morale: 55 + Math.floor(Math.random() * 22),
     hunger: 12 + Math.floor(Math.random() * 12),
-    foodConsumption: profile.foodConsumption,
+    foodConsumption: stats.foodConsumption,
     locationId,
     status: "normal",
     role: null,
