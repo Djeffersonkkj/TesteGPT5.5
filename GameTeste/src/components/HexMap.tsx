@@ -1,9 +1,10 @@
 import {
-  canActInArea,
-  getPlayerMainAreaId,
+  canMoveToArea,
   isVisualArea,
+  normalizeAreaId,
 } from "../game/map";
 import type { AreaId, GameState } from "../game/types";
+import { livingFactionMonkeys } from "../game/utils";
 
 interface Props {
   state: GameState;
@@ -39,8 +40,9 @@ function baseClass(ownerFactionId: string | null, playerFactionId: string): stri
 }
 
 export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
-  const playerOriginAreaId = getPlayerMainAreaId(state);
   const visualAreas = state.areas.filter(isVisualArea);
+  const playerMonkeys = livingFactionMonkeys(state, state.playerFactionId);
+  const selectedArea = state.areas.find((area) => area.id === selectedAreaId);
 
   return (
     <section className="panel map-panel">
@@ -49,12 +51,16 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
           <p className="eyebrow">mapa fixo</p>
           <h2>Ilha Hexagonal</h2>
         </div>
-        <span className="mini-help">posição: {state.areas.find((area) => area.id === playerOriginAreaId)?.shortName}</span>
+        <span className="mini-help">selecionado: {selectedArea?.shortName ?? "?"}</span>
       </div>
       <div className="hex-map" aria-label="Mapa da ilha">
         {visualAreas.map((area) => {
           const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
-          const reachable = canActInArea(playerOriginAreaId, area.id);
+          const hasPlayerHere = playerMonkeys.some((monkey) => normalizeAreaId(monkey.locationId) === area.id);
+          const reachable = playerMonkeys.some((monkey) => {
+            const currentAreaId = normalizeAreaId(monkey.locationId);
+            return currentAreaId === area.id || canMoveToArea(currentAreaId, area.id);
+          });
           const position = getTilePosition(area.visualPosition!.row, area.visualPosition!.col);
 
           return (
@@ -64,7 +70,7 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
                 "hex-tile",
                 selectedAreaId === area.id ? "selected" : "",
                 reachable ? "reachable" : "",
-                area.id === playerOriginAreaId ? "current-origin" : "",
+                hasPlayerHere ? "current-origin" : "",
                 area.isStartingBase ? "starting-base" : "",
                 baseClass(area.ownerFactionId, state.playerFactionId),
               ]

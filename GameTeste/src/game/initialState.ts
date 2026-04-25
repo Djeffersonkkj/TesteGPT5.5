@@ -139,8 +139,7 @@ function createPlayerMonkeys(options: StartOptions): Monkey[] {
   ];
 
   speciesCycle.forEach((species, index) => {
-    const locationId: AreaId = index < 7 ? "vale" : "caverna";
-    monkeys.push(createMonkey(PLAYER_NAMES[index], species, PLAYER_FACTION_ID, locationId));
+    monkeys.push(createMonkey(PLAYER_NAMES[index], species, PLAYER_FACTION_ID, "vale"));
   });
 
   return monkeys;
@@ -177,14 +176,14 @@ function createEnemyMonkeys(): Monkey[] {
   );
   addGroup(
     SHADOW_FACTION_ID,
-    ["bosque", "ruinas"],
+    ["bosque"],
     ["Gibão", "Macaco-prego", "Gibão", "Chimpanzé"],
     9,
     "Ssha",
   );
   addGroup(
     GOLD_FACTION_ID,
-    ["campo", "praia"],
+    ["campo"],
     ["Chimpanzé", "Macaco-prego", "Gibão", "Mandril"],
     9,
     "Doura",

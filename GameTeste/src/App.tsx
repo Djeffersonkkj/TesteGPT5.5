@@ -9,6 +9,7 @@ import HexMap from "./components/HexMap";
 import InventoryPanel from "./components/InventoryPanel";
 import LogPanel from "./components/LogPanel";
 import MonkeyRoster from "./components/MonkeyRoster";
+import MoveToAreaPanel from "./components/MoveToAreaPanel";
 import StartScreen from "./components/StartScreen";
 import { clearMonkeyOrder, selectArea, setPersistentRole } from "./game/actions";
 import { acknowledgeReport, chooseCombatTactic, describeUnassignedMonkeys, endDay } from "./game/gameEngine";
@@ -146,6 +147,7 @@ export default function App() {
         </aside>
 
         <section className="control-column">
+          <MoveToAreaPanel state={state} onChange={persist} />
           <GroupActionPanel state={state} onChange={persist} />
           <MonkeyRoster
             state={state}

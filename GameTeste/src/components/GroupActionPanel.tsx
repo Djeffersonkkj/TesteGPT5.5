@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { GROUP_ACTION_LABELS } from "../game/constants";
 import { addGroupPlan, removeGroupPlan, suggestMonkeysForAction } from "../game/actions";
-import { canActInArea, getPlayerMainAreaId, normalizeAreaId } from "../game/map";
+import { normalizeAreaId } from "../game/map";
 import type { GameState, GroupActionType } from "../game/types";
 import { livingFactionMonkeys } from "../game/utils";
 
@@ -16,9 +16,6 @@ export default function GroupActionPanel({ state, onChange }: Props) {
   const [actionType, setActionType] = useState<GroupActionType>("collect");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const area = state.areas.find((item) => item.id === state.selectedAreaId)!;
-  const originAreaId = getPlayerMainAreaId(state);
-  const originArea = state.areas.find((item) => item.id === originAreaId);
-  const canReachSelectedArea = canActInArea(originAreaId, area.id);
 
   useEffect(() => {
     setSelectedIds([]);
@@ -28,11 +25,11 @@ export default function GroupActionPanel({ state, onChange }: Props) {
     () =>
       livingFactionMonkeys(state, state.playerFactionId).filter(
         (monkey) =>
-          normalizeAreaId(monkey.locationId) === originAreaId &&
+          normalizeAreaId(monkey.locationId) === area.id &&
           monkey.status !== "inconsciente" &&
           monkey.plannedAction?.kind !== "group",
       ),
-    [state, originAreaId],
+    [state, area.id],
   );
 
   const toggle = (id: string) => {
@@ -42,7 +39,7 @@ export default function GroupActionPanel({ state, onChange }: Props) {
   };
 
   const suggest = () => {
-    setSelectedIds(suggestMonkeysForAction(state, actionType, actionType === "attack" ? 5 : 4));
+    setSelectedIds(suggestMonkeysForAction(state, actionType, area.id, actionType === "attack" ? 5 : 4));
   };
 
   const confirm = () => {
@@ -60,9 +57,10 @@ export default function GroupActionPanel({ state, onChange }: Props) {
         <span className="mini-help">{state.groupPlans.length} planejada(s)</span>
       </div>
 
-      <p className={canReachSelectedArea ? "reach-note" : "reach-note blocked"}>
-        Partida: {originArea?.shortName ?? "?"}.{" "}
-        {canReachSelectedArea ? "Área alcançável hoje." : "Movimento direto bloqueado."}
+      <p className={available.length > 0 ? "reach-note" : "reach-note blocked"}>
+        {available.length > 0
+          ? `${available.length} macaco(s) disponiveis neste cenario.`
+          : "Nenhum macaco disponivel neste cenario."}
       </p>
 
       <div className="toolbar">
@@ -76,7 +74,7 @@ export default function GroupActionPanel({ state, onChange }: Props) {
             ))}
           </select>
         </label>
-        <button className="ghost-button" disabled={!canReachSelectedArea || available.length === 0} onClick={suggest}>
+        <button className="ghost-button" disabled={available.length === 0} onClick={suggest}>
           Sugerir melhores
         </button>
       </div>
@@ -99,7 +97,7 @@ export default function GroupActionPanel({ state, onChange }: Props) {
 
       <button
         className="primary-button full-button"
-        disabled={selectedIds.length === 0 || !canReachSelectedArea}
+        disabled={selectedIds.length === 0}
         onClick={confirm}
       >
         Confirmar grupo ({selectedIds.length})

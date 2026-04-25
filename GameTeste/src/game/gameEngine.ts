@@ -3,7 +3,7 @@ import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SPECIES_PROFILES, 
 import { resolveCombatRound, type CombatOption } from "./combat";
 import { applyHungerAndRecovery, regenerateAreaFood, summarizeFactionRelations } from "./economy";
 import { resolveInternalEvents } from "./events";
-import { canActInArea, getPlayerMainAreaId } from "./map";
+import { normalizeAreaId } from "./map";
 import { createReport, ensureReportHasContent } from "./reports";
 import type {
   DailyReport,
@@ -605,11 +605,23 @@ export function endDay(state: GameState): GameState {
 
   const report = createReport(next.day);
   regenerateAreaFood(next);
-  const originAreaId = getPlayerMainAreaId(next);
-  const blockedPlans = next.groupPlans.filter((plan) => !canActInArea(originAreaId, plan.areaId));
+  const planMembersAreInArea = (plan: GroupActionPlan) =>
+    plan.monkeyIds.every((id) => {
+      const monkey = next.monkeys.find((item) => item.id === id);
+      return monkey && normalizeAreaId(monkey.locationId) === plan.areaId;
+    });
+  const blockedPlans = next.groupPlans.filter((plan) => !planMembersAreInArea(plan));
   if (blockedPlans.length > 0) {
-    report.suspicions.push("Algumas ações foram canceladas: os macacos só podem se mover para áreas adjacentes.");
-    next.groupPlans = next.groupPlans.filter((plan) => canActInArea(originAreaId, plan.areaId));
+    const blockedPlanIds = new Set(blockedPlans.map((plan) => plan.id));
+    report.suspicions.push("Algumas acoes foram canceladas: os macacos precisam estar no cenario da acao.");
+    next.groupPlans = next.groupPlans.filter(planMembersAreInArea);
+    next.monkeys.forEach((monkey) => {
+      if (monkey.plannedAction?.kind !== "group" || !blockedPlanIds.has(monkey.plannedAction.groupActionId)) {
+        return;
+      }
+      monkey.plannedAction = monkey.persistentRole ? { kind: "role", role: monkey.persistentRole } : null;
+      monkey.role = monkey.persistentRole;
+    });
   }
 
   next.groupPlans

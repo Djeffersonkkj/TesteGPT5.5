@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ROLES } from "../game/constants";
 import { assignMonkeyRole, assignRoleToMany } from "../game/actions";
+import { normalizeAreaId } from "../game/map";
 import type { GameState, Monkey, Role } from "../game/types";
 
 interface Props {
@@ -53,11 +54,21 @@ export default function MonkeyRoster({
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("todas");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkRole, setBulkRole] = useState<Role>("Coletor");
+  const selectedArea = state.areas.find((area) => area.id === state.selectedAreaId)!;
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [state.selectedAreaId, statusFilter, roleFilter]);
 
   const monkeys = useMemo(
     () =>
       state.monkeys
-        .filter((monkey) => monkey.factionId === state.playerFactionId && monkey.status !== "morto")
+        .filter(
+          (monkey) =>
+            monkey.factionId === state.playerFactionId &&
+            monkey.status !== "morto" &&
+            normalizeAreaId(monkey.locationId) === state.selectedAreaId,
+        )
         .sort((a, b) => Number(b.isLeader) - Number(a.isLeader) || a.name.localeCompare(b.name)),
     [state],
   );
@@ -117,7 +128,7 @@ export default function MonkeyRoster({
       <div className="panel-title-row">
         <div>
           <p className="eyebrow">funções diárias</p>
-          <h2>Macacos</h2>
+          <h2>Macacos em {selectedArea.shortName}</h2>
         </div>
         <span className="mini-help">{filtered.length}/{monkeys.length}</span>
       </div>
@@ -248,7 +259,7 @@ export default function MonkeyRoster({
               </div>
 
               <span className="location-line">
-                {state.areas.find((area) => area.id === monkey.locationId)?.shortName ?? "?"}
+                {state.areas.find((area) => area.id === normalizeAreaId(monkey.locationId))?.shortName ?? "?"}
               </span>
             </article>
           );

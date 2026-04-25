@@ -1,7 +1,7 @@
 import { ACTION_ROLE_HINT } from "./constants";
-import { canActInArea, getPlayerMainAreaId, normalizeAreaId } from "./map";
+import { canMoveToArea, normalizeAreaId } from "./map";
 import type { AreaId, GameState, GroupActionType, Role } from "./types";
-import { cloneState, getMonkey, livingFactionMonkeys, pushLog, uid } from "./utils";
+import { cloneState, getArea, getMonkey, livingFactionMonkeys, pushLog, syncAreaMonkeyVisibility, uid } from "./utils";
 
 function canReceiveOrder(status: string): boolean {
   return status !== "morto" && status !== "inconsciente";
@@ -73,12 +73,13 @@ export function clearMonkeyOrder(state: GameState, monkeyId: string): GameState 
 export function suggestMonkeysForAction(
   state: GameState,
   actionType: GroupActionType,
+  areaId: AreaId,
   count = 4,
 ): string[] {
-  const originAreaId = getPlayerMainAreaId(state);
+  const targetAreaId = normalizeAreaId(areaId);
   const candidates = livingFactionMonkeys(state, state.playerFactionId).filter(
     (monkey) =>
-      normalizeAreaId(monkey.locationId) === originAreaId &&
+      normalizeAreaId(monkey.locationId) === targetAreaId &&
       monkey.energy > 12 &&
       monkey.status !== "inconsciente" &&
       monkey.status !== "morto" &&
@@ -121,21 +122,22 @@ export function addGroupPlan(
   monkeyIds: string[],
 ): GameState {
   const next = cloneState(state);
-  const originAreaId = getPlayerMainAreaId(next);
   const targetAreaId = normalizeAreaId(areaId);
-
-  if (!canActInArea(originAreaId, targetAreaId)) {
-    pushLog(next, "Os macacos só podem se mover para uma área adjacente.");
-    return next;
-  }
+  const targetArea = getArea(next, targetAreaId);
 
   const ids = [...new Set(monkeyIds)].filter((id) => {
     const monkey = next.monkeys.find((item) => item.id === id);
-    return monkey && canReceiveOrder(monkey.status) && normalizeAreaId(monkey.locationId) === originAreaId;
+    return (
+      monkey &&
+      monkey.factionId === next.playerFactionId &&
+      canReceiveOrder(monkey.status) &&
+      normalizeAreaId(monkey.locationId) === targetAreaId &&
+      monkey.plannedAction?.kind !== "group"
+    );
   });
 
   if (ids.length === 0) {
-    pushLog(next, "Nenhuma ação em grupo foi criada: escolha macacos disponíveis na área de partida.");
+    pushLog(next, `Nenhuma acao em grupo foi criada: escolha macacos em ${targetArea.shortName}.`);
     return next;
   }
 
@@ -155,11 +157,52 @@ export function addGroupPlan(
       kind: "group",
       groupActionId: plan.id,
       actionType,
-      areaId,
+      areaId: targetAreaId,
     };
   });
 
   pushLog(next, `Ação em grupo planejada com ${ids.length} macaco(s).`);
+  return next;
+}
+
+export function moveMonkeysToArea(
+  state: GameState,
+  areaId: AreaId,
+  monkeyIds: string[],
+): GameState {
+  const next = cloneState(state);
+  const targetAreaId = normalizeAreaId(areaId);
+  const targetArea = getArea(next, targetAreaId);
+  const movedNames: string[] = [];
+
+  [...new Set(monkeyIds)].forEach((id) => {
+    const monkey = next.monkeys.find((item) => item.id === id);
+    if (
+      !monkey ||
+      monkey.factionId !== next.playerFactionId ||
+      !canReceiveOrder(monkey.status) ||
+      monkey.plannedAction?.kind === "group"
+    ) {
+      return;
+    }
+
+    const currentAreaId = normalizeAreaId(monkey.locationId);
+    if (currentAreaId === targetAreaId || !canMoveToArea(currentAreaId, targetAreaId)) {
+      return;
+    }
+
+    monkey.locationId = targetAreaId;
+    movedNames.push(monkey.name);
+  });
+
+  if (movedNames.length === 0) {
+    pushLog(next, `Nenhum macaco proximo pode se mover para ${targetArea.shortName}.`);
+    return next;
+  }
+
+  next.selectedAreaId = targetAreaId;
+  syncAreaMonkeyVisibility(next);
+  pushLog(next, `${movedNames.join(", ")} moveram-se para ${targetArea.shortName}.`);
   return next;
 }
 

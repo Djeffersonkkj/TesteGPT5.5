@@ -1,6 +1,7 @@
 import { TERRAIN_LABELS } from "../game/constants";
-import { canActInArea, getPlayerMainAreaId } from "../game/map";
+import { canMoveToArea, normalizeAreaId } from "../game/map";
 import type { Area, GameState } from "../game/types";
+import { livingFactionMonkeys } from "../game/utils";
 
 interface Props {
   area: Area;
@@ -9,10 +10,13 @@ interface Props {
 
 export default function AreaPanel({ area, state }: Props) {
   const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
-  const originAreaId = getPlayerMainAreaId(state);
-  const originArea = state.areas.find((item) => item.id === originAreaId);
-  const isCurrentArea = area.id === originAreaId;
-  const isReachable = canActInArea(originAreaId, area.id);
+  const playerMonkeysHere = livingFactionMonkeys(state, state.playerFactionId).filter(
+    (monkey) => normalizeAreaId(monkey.locationId) === area.id,
+  );
+  const nearbyPlayerMonkeys = livingFactionMonkeys(state, state.playerFactionId).filter((monkey) => {
+    const currentAreaId = normalizeAreaId(monkey.locationId);
+    return currentAreaId !== area.id && canMoveToArea(currentAreaId, area.id);
+  });
   const visible = area.visibleMonkeyIds
     .map((id) => state.monkeys.find((monkey) => monkey.id === id))
     .filter(Boolean);
@@ -31,9 +35,9 @@ export default function AreaPanel({ area, state }: Props) {
         <span>Dono</span>
         <strong>{owner?.name ?? "Neutro"}</strong>
         <span>Alcance</span>
-        <strong>{isCurrentArea ? "Área atual" : isReachable ? "Adjacente" : "Distante"}</strong>
-        <span>Partida</span>
-        <strong>{originArea?.shortName ?? "?"}</strong>
+        <strong>{nearbyPlayerMonkeys.length > 0 ? `${nearbyPlayerMonkeys.length} proximo(s)` : "Sem adjacentes"}</strong>
+        <span>Na area</span>
+        <strong>{playerMonkeysHere.length}</strong>
         <span>Perigo</span>
         <strong>{area.dangerLevel}</strong>
         <span>Furtividade</span>
