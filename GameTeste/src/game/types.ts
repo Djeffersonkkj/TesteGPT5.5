@@ -76,6 +76,23 @@ export type Role =
   | "Diplomata"
   | "Descansando";
 
+export type DailyRole = Role;
+
+export type FactionArchetype = {
+  factionId: string;
+  name: string;
+  speciesWeights: Record<MonkeySpecies, number>;
+  preferredRoles: DailyRole[];
+  behaviorBias: {
+    aggression: number;
+    diplomacy: number;
+    stealth: number;
+    foodFocus: number;
+    expansion: number;
+    riskTolerance: number;
+  };
+};
+
 export type GroupActionType =
   | "collect"
   | "explore"

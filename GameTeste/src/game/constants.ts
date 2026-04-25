@@ -57,7 +57,7 @@ export const SPECIES_PROFILES: Record<
     stealth: 1,
     intelligence: 3,
     charisma: 4,
-    foodConsumption: 4,
+    foodConsumption: 3,
     text: "HP e combate altos, furtividade baixa, intimidação forte.",
   },
   Chimpanzé: {
