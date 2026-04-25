@@ -294,6 +294,7 @@ export interface PendingCombat {
   actedMonkeyIds?: string[];
   defendingMonkeyIds?: string[];
   protectedMonkeyIds?: string[];
+  exposedMonkeyIds?: string[];
   enemyMorale?: number;
   lastEffects?: CombatEffect[];
   result?: CombatResult;
@@ -311,6 +312,18 @@ export type CombatActionId =
   | "protect"
   | "useTool"
   | "saveEnergy";
+
+export type CombatChoice =
+  | "DIRECT_ATTACK"
+  | "DEFEND"
+  | "INTIMIDATE"
+  | "FLEE"
+  | "AMBUSH"
+  | "SAVE_ENERGY"
+  | "FOCUS_LEADER"
+  | "PROTECT_WOUNDED"
+  | "USE_TOOL"
+  | "NEGOTIATE_SURRENDER";
 
 export interface CombatUnit {
   id: string;
@@ -346,10 +359,34 @@ export interface CombatResult {
   playerDeadIds: string[];
   playerInjuredIds: string[];
   enemyDeadIds: string[];
+  damageCaused?: number;
+  damageReceived?: number;
+  energyLoss?: number;
+  moraleChange?: number;
+  fledFactionId?: string;
+  surrenderedFactionId?: string;
+  dailyReportLines?: string[];
   foodDelta: number;
   moraleDelta: number;
   relationDelta: number;
   territoryChanged: boolean;
+}
+
+export interface CombatRoundResult {
+  rounds: number;
+  outcome: "attackersWin" | "defendersWin" | "draw" | "attackersFled" | "defendersFled" | "surrender";
+  damageCaused: number;
+  damageReceived: number;
+  injuredIds: string[];
+  deadIds: string[];
+  attackerEnergyLoss: number;
+  defenderEnergyLoss: number;
+  attackerMoraleDelta: number;
+  defenderMoraleDelta: number;
+  fledFactionId?: string;
+  surrenderedFactionId?: string;
+  log: string[];
+  dailyReportLines: string[];
 }
 
 export interface GameOverInfo {

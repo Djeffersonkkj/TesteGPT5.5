@@ -22,6 +22,7 @@ export type SkillActionContext =
   | "protect"
   | "surrender"
   | "useTool"
+  | "saveEnergy"
   | "ambush"
   | "desertion";
 
