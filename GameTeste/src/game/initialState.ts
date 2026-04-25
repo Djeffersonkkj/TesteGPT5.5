@@ -170,8 +170,8 @@ function createEnemyMonkeys(): Monkey[] {
 
   addGroup(
     STONE_FACTION_ID,
-    ["aldeia-cipo", "montanha", "trovao"],
-    ["Gorila", "Mandril", "Gorila", "Chimpanzé"],
+    ["montanha"],
+    ["Gorila", "Gorila", "Mandril", "Gorila", "Chimpanzé"],
     10,
     "Urgo",
   );

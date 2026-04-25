@@ -11,6 +11,8 @@ interface Props {
   onSelect: (areaId: AreaId) => void;
 }
 
+const MAP_W = 920;
+const MAP_H = 520;
 const TILE_W = 170;
 const TILE_H = 150;
 const X_GAP = 112;
@@ -18,8 +20,8 @@ const Y_GAP = 104;
 
 function getTilePosition(row: number, col: number) {
   return {
-    left: col * X_GAP + 46,
-    top: (row - 1) * Y_GAP + 18,
+    left: ((col * X_GAP + 46) / MAP_W) * 100,
+    top: (((row - 1) * Y_GAP + 18) / MAP_H) * 100,
   };
 }
 
@@ -71,10 +73,10 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
               key={area.id}
               onClick={() => onSelect(area.id)}
               style={{
-                left: position.left,
-                top: position.top,
-                width: TILE_W,
-                height: TILE_H,
+                left: `${position.left}%`,
+                top: `${position.top}%`,
+                width: `${(TILE_W / MAP_W) * 100}%`,
+                height: `${(TILE_H / MAP_H) * 100}%`,
                 ["--owner-color" as string]: owner?.color ?? "#b6b0a4",
               }}
             >

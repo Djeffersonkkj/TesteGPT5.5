@@ -3,6 +3,7 @@ import type { Area, AreaId, GameState } from "./types";
 import { syncAreaMonkeyVisibility } from "./utils";
 
 const SAVE_KEY = "ilha-dos-macacos-save-v1";
+const STONE_FACTION_ID = "stone";
 
 type SavedArea = Partial<Area> & { id?: string };
 
@@ -31,12 +32,21 @@ function normalizeSavedGame(state: GameState): GameState {
 
   state.areas = createMapAreas().map((area) => {
     const saved = savedById.get(area.id);
-    const ownerFactionId =
-      legacyMap && area.isStartingBase
-        ? area.ownerFactionId
-        : hasOwn(saved, "ownerFactionId")
-          ? saved?.ownerFactionId ?? null
-          : area.ownerFactionId;
+    const ownerFactionId = (() => {
+      if ((area.id === "aldeia-cipo" || area.id === "trovao") && saved?.ownerFactionId === STONE_FACTION_ID) {
+        return area.ownerFactionId;
+      }
+      if (area.id === "montanha" && saved?.ownerFactionId == null) {
+        return area.ownerFactionId;
+      }
+      if (legacyMap && area.isStartingBase) {
+        return area.ownerFactionId;
+      }
+      if (hasOwn(saved, "ownerFactionId")) {
+        return saved?.ownerFactionId ?? null;
+      }
+      return area.ownerFactionId;
+    })();
     const currentFood =
       typeof saved?.currentFood === "number"
         ? Math.max(0, Math.min(saved.currentFood, area.maxFood))
@@ -54,11 +64,16 @@ function normalizeSavedGame(state: GameState): GameState {
 
   state.selectedAreaId = normalizeSavedAreaRef(String(state.selectedAreaId), legacyMap, true);
   state.monkeys = (state.monkeys ?? []).map((monkey) => {
-    const locationId = normalizeSavedAreaRef(
+    const savedLocationId = normalizeSavedAreaRef(
       String(monkey.locationId),
       legacyMap,
       monkey.factionId === state.playerFactionId,
     );
+    const locationId =
+      monkey.factionId === STONE_FACTION_ID &&
+      (savedLocationId === "aldeia-cipo" || savedLocationId === "trovao")
+        ? "montanha"
+        : savedLocationId;
     const plannedAction =
       monkey.plannedAction?.kind === "group"
         ? {
