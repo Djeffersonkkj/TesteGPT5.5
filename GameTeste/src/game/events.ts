@@ -188,11 +188,10 @@ function createRuinDecision(plan: GroupActionPlan): PendingDecision {
       {
         id: "enter",
         label: "Entrar apesar do risco",
-        description: "Ganha comida rara, mas alguem pode se ferir.",
+        description: "Pode revelar comida rara, mas tambem pode virar uma emboscada.",
         effects: [
-          { type: "food", value: 2 },
-          { type: "hurtRandomPlayer", value: 2 },
-          { type: "addReport", reportLevel: "suspeita", text: "A expedicao trouxe frutos escondidos, mas voltou com arranhoes e silencio demais." },
+          { type: "startCombat", factionId: SHADOW_FACTION_ID, areaId: plan.areaId },
+          { type: "addReport", reportLevel: "suspeita", text: "A exploracao profunda das ruinas chamou inimigos escondidos." },
         ],
       },
     ],

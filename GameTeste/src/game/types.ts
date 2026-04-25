@@ -226,9 +226,65 @@ export interface PendingCombat {
   playerSide: "attacker" | "defender";
   round: number;
   maxRounds: number;
+  phase?: "playerTurn" | "enemyTurn" | "summary";
   playerMonkeyIds: string[];
   enemyMonkeyIds: string[];
+  actedMonkeyIds?: string[];
+  defendingMonkeyIds?: string[];
+  protectedMonkeyIds?: string[];
+  enemyMorale?: number;
+  lastEffects?: CombatEffect[];
+  result?: CombatResult;
   log: string[];
+}
+
+export type CombatActionId =
+  | "attack"
+  | "defend"
+  | "intimidate"
+  | "flee"
+  | "protect"
+  | "useTool"
+  | "saveEnergy";
+
+export interface CombatUnit {
+  id: string;
+  monkeyId?: string;
+  name: string;
+  factionId: string;
+  team: "player" | "enemy";
+  hp: number;
+  maxHp: number;
+  energy: number;
+  attack: number;
+  defense: number;
+  stealth: number;
+  charisma: number;
+  morale: number;
+  position: { x: number; y: number };
+  hasActed: boolean;
+  status: string[];
+  sprite?: string;
+}
+
+export interface CombatEffect {
+  unitId: string;
+  kind: "hit" | "defend" | "heal" | "intimidate" | "miss";
+  text: string;
+}
+
+export interface CombatResult {
+  outcome: "victory" | "defeat" | "flee" | "draw" | "surrender" | "enemyFled";
+  title: string;
+  reason: string;
+  lines: string[];
+  playerDeadIds: string[];
+  playerInjuredIds: string[];
+  enemyDeadIds: string[];
+  foodDelta: number;
+  moraleDelta: number;
+  relationDelta: number;
+  territoryChanged: boolean;
 }
 
 export interface GameOverInfo {

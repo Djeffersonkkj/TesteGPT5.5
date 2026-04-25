@@ -1,6 +1,6 @@
 import { resolveEnemyAI } from "./ai";
 import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SHADOW_FACTION_ID, SPECIES_PROFILES, TOOLS } from "./constants";
-import { resolveCombatRound, type CombatOption } from "./combat";
+import { applyCombatConsequences, performPlayerCombatAction, type CombatActionRequest } from "./combat";
 import { applyHungerAndRecovery, regenerateAreaFood, summarizeFactionRelations } from "./economy";
 import { generatePendingDecisions } from "./events";
 import { normalizeAreaId } from "./map";
@@ -442,14 +442,80 @@ function createCombatFromPlan(
     playerSide: "attacker",
     round: 1,
     maxRounds: 3,
+    phase: "playerTurn",
     playerMonkeyIds: attackers.map((monkey) => monkey.id),
     enemyMonkeyIds: defenders.slice(0, Math.max(3, attackers.length)).map((monkey) => monkey.id),
+    actedMonkeyIds: [],
+    defendingMonkeyIds: [],
+    protectedMonkeyIds: [],
+    enemyMorale: Math.floor(average(defenders.map((monkey) => monkey.morale))) || getFaction(state, defenderFactionId).morale,
+    lastEffects: [],
     log: [`Conflito iniciado em ${area.name} contra ${getFaction(state, defenderFactionId).name}.`],
   };
 
   report.confirmed.push(
     `O grupo de ataque encontrou resistência em ${area.name}. A decisão tática ficou nas mãos do líder.`,
   );
+  return true;
+}
+
+function createCombatFromEvent(
+  state: GameState,
+  areaId: AreaId | undefined,
+  enemyFactionId: string | undefined,
+  report: DailyReport,
+): boolean {
+  const area = getArea(state, areaId ?? state.selectedAreaId);
+  const rivalId =
+    enemyFactionId ??
+    area.ownerFactionId ??
+    state.factions.find((faction) => !faction.isPlayer && faction.alive)?.id;
+  if (!rivalId || rivalId === state.playerFactionId) {
+    report.suspicions.push("O alerta hostil passou sem inimigos claros.");
+    return false;
+  }
+
+  const defenders = livingFactionMonkeys(state, state.playerFactionId)
+    .filter((monkey) => normalizeAreaId(monkey.locationId) === area.id)
+    .slice(0, 4);
+  const playerGroup = defenders.length > 0 ? defenders : livingFactionMonkeys(state, state.playerFactionId).slice(0, 3);
+  const enemiesHere = livingFactionMonkeys(state, rivalId).filter((monkey) => normalizeAreaId(monkey.locationId) === area.id);
+  const enemies = (enemiesHere.length > 0 ? enemiesHere : livingFactionMonkeys(state, rivalId)).slice(0, Math.max(2, playerGroup.length));
+
+  if (playerGroup.length === 0 || enemies.length === 0) {
+    report.suspicions.push("A emboscada nao encontrou lutadores suficientes para virar combate aberto.");
+    return false;
+  }
+
+  playerGroup.forEach((monkey) => {
+    monkey.locationId = area.id;
+  });
+  enemies.forEach((monkey) => {
+    monkey.locationId = area.id;
+  });
+
+  state.pendingCombat = {
+    id: uid("combat"),
+    areaId: area.id,
+    attackerFactionId: rivalId,
+    defenderFactionId: state.playerFactionId,
+    playerSide: "defender",
+    round: 1,
+    maxRounds: 3,
+    phase: "playerTurn",
+    playerMonkeyIds: playerGroup.map((monkey) => monkey.id),
+    enemyMonkeyIds: enemies.map((monkey) => monkey.id),
+    actedMonkeyIds: [],
+    defendingMonkeyIds: [],
+    protectedMonkeyIds: [],
+    enemyMorale: Math.floor(average(enemies.map((monkey) => monkey.morale))) || getFaction(state, rivalId).morale,
+    lastEffects: [],
+    log: [`Emboscada iniciada em ${area.name} contra ${getFaction(state, rivalId).name}.`],
+  };
+  state.phase = "combat";
+  state.workingReport = report;
+  pushLog(state, `Emboscada em ${area.name}.`);
+  report.confirmed.push(`Uma ameaca hostil virou combate em ${area.name}.`);
   return true;
 }
 
@@ -720,6 +786,11 @@ function applyDecisionEffect(
 
   if (effect.type === "addReport" && effect.text) {
     addDecisionReportLine(report, effect.reportLevel, effect.text);
+    return;
+  }
+
+  if (effect.type === "startCombat") {
+    createCombatFromEvent(state, effect.areaId, effect.factionId, report);
   }
 }
 
@@ -822,21 +893,37 @@ export function resolvePlayerActions(state: GameState, report: DailyReport): boo
   return false;
 }
 
-export function chooseCombatTactic(
+export function chooseCombatAction(
   state: GameState,
-  tactic: CombatOption["id"],
+  request: CombatActionRequest,
 ): GameState {
   const next = cloneState(state);
   if (next.phase !== "combat" || !next.pendingCombat || !next.workingReport) {
     return next;
   }
 
-  const result = resolveCombatRound(next, tactic);
-  if (!result.finished) {
-    return result.state;
+  return performPlayerCombatAction(next, request);
+}
+
+export function confirmCombatSummary(state: GameState): GameState {
+  const next = cloneState(state);
+  if (next.phase !== "combat" || !next.pendingCombat?.result) {
+    return next;
   }
 
-  return continueAfterResolution(result.state, result.state.workingReport ?? createReport(result.state.day));
+  const report = next.workingReport ?? createReport(next.day);
+  applyCombatConsequences(next, report);
+  const resultTitle = next.pendingCombat.result.title;
+  next.pendingCombat = null;
+  next.workingReport = report;
+  pushLog(next, `Combate encerrado: ${resultTitle}.`);
+
+  if (next.pendingDecisions.length > 0) {
+    next.phase = "decisions";
+    return next;
+  }
+
+  return continueAfterResolution(next, report);
 }
 
 export function applyDecisionOption(
@@ -863,6 +950,10 @@ export function applyDecisionOption(
 
   next.pendingDecisions = next.pendingDecisions.filter((item) => item.id !== decision.id);
   next.workingReport = report;
+
+  if ((next as GameState).phase === "combat" && next.pendingCombat) {
+    return next;
+  }
 
   if (next.pendingDecisions.length > 0) {
     next.phase = "decisions";
