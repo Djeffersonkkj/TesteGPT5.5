@@ -3,6 +3,7 @@ import {
   isVisualArea,
   normalizeAreaId,
 } from "../game/map";
+import { ASSETS, factionFlag } from "../game/assets";
 import type { AreaId, GameState } from "../game/types";
 import { livingFactionMonkeys } from "../game/utils";
 
@@ -57,6 +58,7 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
         {visualAreas.map((area) => {
           const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
           const hasPlayerHere = playerMonkeys.some((monkey) => normalizeAreaId(monkey.locationId) === area.id);
+          const playerCount = playerMonkeys.filter((monkey) => normalizeAreaId(monkey.locationId) === area.id).length;
           const reachable = playerMonkeys.some((monkey) => {
             const currentAreaId = normalizeAreaId(monkey.locationId);
             return currentAreaId === area.id || canMoveToArea(currentAreaId, area.id);
@@ -87,6 +89,16 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
               }}
             >
               <img alt="" src={area.image} />
+              <span className="area-ribbon">
+                {factionFlag(area.ownerFactionId) && <img alt="" src={factionFlag(area.ownerFactionId)} />}
+                <b>{area.shortName}</b>
+              </span>
+              {playerCount > 0 && (
+                <span className="unit-count">
+                  <img alt="" src={ASSETS.icons.population} />
+                  {playerCount}
+                </span>
+              )}
             </button>
           );
         })}

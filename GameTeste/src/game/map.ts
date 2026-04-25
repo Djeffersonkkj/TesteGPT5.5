@@ -7,30 +7,30 @@ import {
 import type { Area, AreaId, GameState } from "./types";
 
 const bananeirasImage = new URL(
-  "../../imagens/floresta_bananeiras_sem_fundo_cortado.png",
+  "../../imagens/cenarios/floresta_bananeiras_sem_fundo_cortado.png",
   import.meta.url,
 ).href;
 const pantanoImage = new URL(
-  "../../imagens/pantano_mosquitos_sem_fundo_cortado.png",
+  "../../imagens/cenarios/pantano_mosquitos_sem_fundo_cortado.png",
   import.meta.url,
 ).href;
 const ruinasImage = new URL(
-  "../../imagens/ruinas_antigas_final_sem_fundo.png",
+  "../../imagens/cenarios/ruinas_antigas_final_sem_fundo.png",
   import.meta.url,
 ).href;
 const montanhaImage = new URL(
-  "../../imagens/montanha_gorilas_sem_fundo_refeito.png",
+  "../../imagens/cenarios/montanha_gorilas_sem_fundo_refeito.png",
   import.meta.url,
 ).href;
 const praiaImage = new URL(
-  "../../imagens/praia_dos_cascos_final_sem_fundo.png",
+  "../../imagens/cenarios/praia_dos_cascos_final_sem_fundo.png",
   import.meta.url,
 ).href;
-const valeImage = new URL("../../imagens/vale_frutas_sem_fundo_refeito.png", import.meta.url).href;
-const cavernaImage = new URL("../../imagens/caverna_exilados_sem_fundo.png", import.meta.url).href;
-const rioImage = new URL("../../imagens/rio_barrento_sem_fundo.png", import.meta.url).href;
+const valeImage = new URL("../../imagens/cenarios/vale_frutas_sem_fundo_refeito.png", import.meta.url).href;
+const cavernaImage = new URL("../../imagens/cenarios/caverna_exilados_sem_fundo.png", import.meta.url).href;
+const rioImage = new URL("../../imagens/cenarios/rio_barrento_sem_fundo.png", import.meta.url).href;
 const campoImage = new URL(
-  "../../imagens/campo_aberto_sem_fundo_cortado.png",
+  "../../imagens/cenarios/campo_aberto_sem_fundo_cortado.png",
   import.meta.url,
 ).href;
 

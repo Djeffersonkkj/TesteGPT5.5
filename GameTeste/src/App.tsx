@@ -1,16 +1,22 @@
 import { useMemo, useState } from "react";
-import AreaPanel from "./components/AreaPanel";
+import AreaInfoPanel from "./components/AreaInfoPanel";
 import CombatModal from "./components/CombatModal";
 import DailyReportScreen from "./components/DailyReportScreen";
 import FactionPanel from "./components/FactionPanel";
+import GameLayout from "./components/GameLayout";
+import GameModal from "./components/GameModal";
 import GameOverScreen from "./components/GameOverScreen";
 import GroupActionPanel from "./components/GroupActionPanel";
 import HexMap from "./components/HexMap";
 import InventoryPanel from "./components/InventoryPanel";
+import LeftActionBar, { type ModalId } from "./components/LeftActionBar";
 import LogPanel from "./components/LogPanel";
 import MonkeyRoster from "./components/MonkeyRoster";
 import MoveToAreaPanel from "./components/MoveToAreaPanel";
+import NotificationModal from "./components/NotificationModal";
+import NotificationSummary from "./components/NotificationSummary";
 import StartScreen from "./components/StartScreen";
+import TribeStatusBar from "./components/TribeStatusBar";
 import { clearMonkeyOrder, selectArea, setPersistentRole } from "./game/actions";
 import { acknowledgeReport, chooseCombatTactic, describeUnassignedMonkeys, endDay } from "./game/gameEngine";
 import { createInitialState } from "./game/initialState";
@@ -20,6 +26,7 @@ import type { GameState, Role, Species } from "./game/types";
 export default function App() {
   const [state, setState] = useState<GameState | null>(null);
   const [saveNotice, setSaveNotice] = useState("");
+  const [activeModal, setActiveModal] = useState<ModalId | null>(null);
   const canContinue = useMemo(() => hasSavedGame(), [state]);
 
   const startGame = (leaderName: string, leaderSpecies: Species, factionName: string) => {
@@ -72,7 +79,7 @@ export default function App() {
     );
   }
 
-  const selectedArea = state.areas.find((area) => area.id === state.selectedAreaId) ?? state.areas[0];
+  const selectedArea = state.areas.find((area) => area.id === state.selectedAreaId) ?? null;
 
   const handleEndDay = () => {
     const unassigned = describeUnassignedMonkeys(state);
@@ -109,61 +116,110 @@ export default function App() {
     persist(clearMonkeyOrder(state, monkeyId));
   };
 
-  return (
-    <main className="game-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Ilha dos Macacos</p>
-          <h1>Dia {state.day}</h1>
-        </div>
-        <div className="topbar-actions">
-          {saveNotice && <span className="save-notice">{saveNotice}</span>}
-          <button className="ghost-button" onClick={handleSave}>
-            Salvar
-          </button>
-          <button className="ghost-button danger" onClick={handleRestart}>
-            Reiniciar
-          </button>
-          <button className="primary-button" onClick={handleEndDay}>
-            Encerrar Dia
-          </button>
-        </div>
-      </header>
+  const renderReport = () => (
+    <div className="report-grid modal-report-grid">
+      <section className="report-block">
+        <h2>Confirmado</h2>
+        <ul>{state.report.confirmed.map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
+        <h2>Rumores</h2>
+        <ul>{state.report.rumors.map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
+        <h2>Suspeitas</h2>
+        <ul>{state.report.suspicions.map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
+        <h2>Fome</h2>
+        <ul>{state.report.hungerSummary.map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
+        <h2>Mortes e feridos</h2>
+        <ul>{state.report.casualtySummary.map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
+        <h2>Relacoes</h2>
+        <ul>{state.report.relationsSummary.map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+    </div>
+  );
 
-      <section className="main-layout">
-        <div className="map-column">
-          <HexMap
-            selectedAreaId={state.selectedAreaId}
-            state={state}
-            onSelect={(areaId) => persist(selectArea(state, areaId))}
-          />
-          <LogPanel logs={state.logs} />
-        </div>
+  const renderModalContent = () => {
+    if (!activeModal) {
+      return null;
+    }
 
-        <aside className="side-column">
-          <AreaPanel area={selectedArea} state={state} />
-          <FactionPanel state={state} />
-          <InventoryPanel state={state} />
-        </aside>
+    const modalProps = {
+      tribe: { title: "Tribo", eyebrow: "macacos e funcoes", wide: true },
+      actions: { title: selectedArea?.name ?? "Acoes", eyebrow: "planejamento", wide: true },
+      report: { title: state.report.title, eyebrow: `relatorio do dia ${state.report.day}`, wide: true },
+      notifications: { title: "Notificacoes", eyebrow: "alertas da tribo", wide: true },
+      diplomacy: { title: "Diplomacia", eyebrow: "relacoes entre faccoes", wide: false },
+      inventory: { title: "Inventario", eyebrow: "ferramentas e recursos", wide: false },
+    }[activeModal];
 
-        <section className="control-column">
-          <MoveToAreaPanel state={state} onChange={persist} />
-          <GroupActionPanel state={state} onChange={persist} />
+    return (
+      <GameModal
+        eyebrow={modalProps.eyebrow}
+        title={modalProps.title}
+        wide={modalProps.wide}
+        onClose={() => setActiveModal(null)}
+      >
+        {activeModal === "tribe" && (
           <MonkeyRoster
             state={state}
             onChange={persist}
             onClearOrder={handleClearOrder}
             onSetPersistentRole={handlePersistentRole}
           />
-        </section>
-      </section>
+        )}
+        {activeModal === "actions" && (
+          <div className="modal-panel-grid">
+            <MoveToAreaPanel state={state} onChange={persist} />
+            <GroupActionPanel state={state} onChange={persist} />
+          </div>
+        )}
+        {activeModal === "report" && renderReport()}
+        {activeModal === "notifications" && <NotificationModal state={state} />}
+        {activeModal === "diplomacy" && <FactionPanel state={state} />}
+        {activeModal === "inventory" && <InventoryPanel state={state} />}
+      </GameModal>
+    );
+  };
 
-      {state.phase === "combat" && state.pendingCombat && (
-        <CombatModal
+  return (
+    <GameLayout
+      topBar={
+        <TribeStatusBar
+          saveNotice={saveNotice}
           state={state}
-          onChoose={(tactic) => persist(chooseCombatTactic(state, tactic))}
+          onRestart={handleRestart}
+          onSave={handleSave}
         />
-      )}
-    </main>
+      }
+      leftBar={<LeftActionBar onEndDay={handleEndDay} onOpen={setActiveModal} />}
+      map={
+        <>
+          <HexMap
+            selectedAreaId={state.selectedAreaId}
+            state={state}
+            onSelect={(areaId) => persist(selectArea(state, areaId))}
+          />
+          <LogPanel logs={state.logs} />
+        </>
+      }
+      infoPanel={<AreaInfoPanel area={selectedArea} state={state} onPlanAction={() => setActiveModal("actions")} />}
+      modal={renderModalContent()}
+      notifications={<NotificationSummary state={state} onOpen={() => setActiveModal("notifications")} />}
+      overlay={
+        state.phase === "combat" && state.pendingCombat ? (
+          <CombatModal
+            state={state}
+            onChoose={(tactic) => persist(chooseCombatTactic(state, tactic))}
+          />
+        ) : null
+      }
+    />
   );
 }
