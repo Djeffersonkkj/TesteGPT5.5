@@ -1,7 +1,6 @@
-import { GOLD_FACTION_ID, SHADOW_FACTION_ID, STONE_FACTION_ID } from "./constants";
+import { GOLD_FACTION_ID, STONE_FACTION_ID } from "./constants";
 import type { DailyReport, GameState, GroupActionPlan, Monkey, PendingDecision } from "./types";
 import {
-  changeRelation,
   clamp,
   getFaction,
   livingFactionMonkeys,
@@ -141,7 +140,6 @@ function createDesertionDecision(monkey: Monkey): PendingDecision {
         effects: [
           { type: "exileMonkey", target: monkey.id },
           { type: "morale", value: -5 },
-          { type: "relation", factionId: SHADOW_FACTION_ID, value: -8 },
           { type: "addReport", reportLevel: "confirmado", text: `${monkey.name} foi expulso da tribo.` },
         ],
       },
@@ -190,8 +188,8 @@ function createRuinDecision(plan: GroupActionPlan): PendingDecision {
         label: "Entrar apesar do risco",
         description: "Pode revelar comida rara, mas tambem pode virar uma emboscada.",
         effects: [
-          { type: "startCombat", factionId: SHADOW_FACTION_ID, areaId: plan.areaId },
-          { type: "addReport", reportLevel: "suspeita", text: "A exploracao profunda das ruinas chamou inimigos escondidos." },
+          { type: "startCombat", factionId: STONE_FACTION_ID, areaId: plan.areaId },
+          { type: "addReport", reportLevel: "suspeita", text: "A exploracao profunda das ruinas chamou uma patrulha hostil." },
         ],
       },
     ],
@@ -323,16 +321,11 @@ export function resolveInternalEvents(state: GameState, report: DailyReport): vo
   }
 
   if (suspect.loyalty < 28 && roll(0.45)) {
-    suspect.factionId = SHADOW_FACTION_ID;
-    suspect.locationId = "bosque";
-    suspect.role = null;
-    suspect.persistentRole = null;
-    suspect.plannedAction = null;
+    state.monkeys = state.monkeys.filter((monkey) => monkey.id !== suspect.id);
     playerFaction.deserters += 1;
-    changeRelation(state, state.playerFactionId, SHADOW_FACTION_ID, -12);
 
     if (guards > 24) {
-      report.confirmed.push(`${suspect.name} desertou e foi rastreado indo na direção da Sombra das Copas.`);
+      report.confirmed.push(`${suspect.name} desertou e sumiu pelas trilhas do Bosque Alto.`);
     } else {
       report.suspicions.push("Um macaco deixou a tribo durante a noite, mas ninguém viu o rosto.");
     }

@@ -5,6 +5,7 @@ import { syncAreaMonkeyVisibility } from "./utils";
 
 const SAVE_KEY = "ilha-dos-macacos-save-v1";
 const STONE_FACTION_ID = "stone";
+const SHADOW_FACTION_ID = "shadow";
 
 type SavedArea = Partial<Area> & { id?: string };
 
@@ -37,6 +38,9 @@ function normalizeSavedGame(state: GameState): GameState {
       if ((area.id === "aldeia-cipo" || area.id === "trovao") && saved?.ownerFactionId === STONE_FACTION_ID) {
         return area.ownerFactionId;
       }
+      if (saved?.ownerFactionId === SHADOW_FACTION_ID) {
+        return area.ownerFactionId;
+      }
       if (area.id === "montanha" && saved?.ownerFactionId == null) {
         return area.ownerFactionId;
       }
@@ -64,7 +68,16 @@ function normalizeSavedGame(state: GameState): GameState {
   });
 
   state.selectedAreaId = normalizeSavedAreaRef(String(state.selectedAreaId), legacyMap, true);
-  state.monkeys = (state.monkeys ?? []).map((monkey) => {
+  state.factions = (state.factions ?? [])
+    .filter((faction) => faction.id !== SHADOW_FACTION_ID)
+    .map((faction) => ({
+      ...faction,
+      relations: Object.fromEntries(
+        Object.entries(faction.relations ?? {}).filter(([factionId]) => factionId !== SHADOW_FACTION_ID),
+      ),
+    }));
+
+  state.monkeys = (state.monkeys ?? []).filter((monkey) => monkey.factionId !== SHADOW_FACTION_ID).map((monkey) => {
     const savedLocationId = normalizeSavedAreaRef(
       String(monkey.locationId),
       legacyMap,
@@ -98,10 +111,21 @@ function normalizeSavedGame(state: GameState): GameState {
     areaId: normalizeSavedAreaRef(String(plan.areaId), legacyMap, true),
   }));
   if (state.pendingCombat) {
-    state.pendingCombat = {
+    const combat = {
       ...state.pendingCombat,
       areaId: normalizeAreaId(state.pendingCombat.areaId),
     };
+    const existingMonkeyIds = new Set(state.monkeys.map((monkey) => monkey.id));
+    const removedShadowCombat =
+      combat.attackerFactionId === SHADOW_FACTION_ID || combat.defenderFactionId === SHADOW_FACTION_ID;
+    const missingCombatants = [...combat.playerMonkeyIds, ...combat.enemyMonkeyIds].some(
+      (monkeyId) => !existingMonkeyIds.has(monkeyId),
+    );
+    state.pendingCombat = removedShadowCombat || missingCombatants ? null : combat;
+    if (state.phase === "combat" && !state.pendingCombat) {
+      state.phase = "planning";
+      state.workingReport = null;
+    }
   }
   state.pendingDecisions = Array.isArray(state.pendingDecisions) ? state.pendingDecisions : [];
   if (state.phase === "decisions" && !state.workingReport) {

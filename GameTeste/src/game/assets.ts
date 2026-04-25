@@ -5,7 +5,6 @@ export const ASSETS = {
   factions: {
     player: icon("13_estandarte_jogador_macaco.png"),
     stone: icon("14_estandarte_punho_de_pedra.png"),
-    shadow: icon("15_estandarte_sombra_das_copas.png"),
     gold: icon("16_estandarte_fruto_dourado.png"),
   },
   icons: {

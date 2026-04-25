@@ -1,5 +1,5 @@
 import { monkeyPortrait } from "./assets";
-import { GOLD_FACTION_ID, SHADOW_FACTION_ID, STONE_FACTION_ID } from "./constants";
+import { GOLD_FACTION_ID, STONE_FACTION_ID } from "./constants";
 import type {
   CombatActionId,
   CombatEffect,
@@ -394,16 +394,6 @@ function runEnemyTurn(state: GameState, combat: PendingCombat): void {
       addDefending(combat, enemy.id);
       pushCombatLog(combat, `${enemy.name} recuou e tentou negociar tempo.`);
       effects.push({ unitId: enemy.id, kind: "defend", text: "defesa" });
-      continue;
-    }
-
-    const injuredTarget = players.find((monkey) => monkey.status === "ferido" || monkey.hp < monkey.maxHp * 0.5);
-    if (factionId === SHADOW_FACTION_ID && injuredTarget && Math.random() < 0.35) {
-      injuredTarget.energy = clamp(injuredTarget.energy - 7, 0, injuredTarget.maxEnergy);
-      injuredTarget.morale = clamp(injuredTarget.morale - 8, 0, 100);
-      updateMonkeyStatus(injuredTarget);
-      pushCombatLog(combat, `${enemy.name} sabotou ${injuredTarget.name} pelas copas.`);
-      effects.push({ unitId: injuredTarget.id, kind: "intimidate", text: "-energia" });
       continue;
     }
 

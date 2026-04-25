@@ -177,7 +177,7 @@ export interface Monkey {
   isLeader: boolean;
 }
 
-export type AiPersonality = "player" | "stone" | "shadow" | "gold";
+export type AiPersonality = "player" | "stone" | "gold";
 
 export interface Faction {
   id: string;

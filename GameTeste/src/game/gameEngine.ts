@@ -1,5 +1,5 @@
 import { resolveEnemyAI } from "./ai";
-import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SHADOW_FACTION_ID, SPECIES_PROFILES, TOOLS } from "./constants";
+import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SPECIES_PROFILES, TOOLS } from "./constants";
 import { applyCombatConsequences, performPlayerCombatAction, type CombatActionRequest } from "./combat";
 import { applyHungerAndRecovery, regenerateAreaFood, summarizeFactionRelations } from "./economy";
 import { generatePendingDecisions } from "./events";
@@ -725,6 +725,9 @@ function applyDecisionEffect(
   }
 
   if (effect.type === "relation" && effect.factionId) {
+    if (!state.factions.some((faction) => faction.id === effect.factionId)) {
+      return;
+    }
     changeRelation(state, state.playerFactionId, effect.factionId, value);
     return;
   }
@@ -752,11 +755,7 @@ function applyDecisionEffect(
   if (effect.type === "exileMonkey" && effect.target) {
     const monkey = state.monkeys.find((item) => item.id === effect.target);
     if (monkey) {
-      monkey.factionId = effect.factionId ?? SHADOW_FACTION_ID;
-      monkey.locationId = "bosque";
-      monkey.role = null;
-      monkey.persistentRole = null;
-      monkey.plannedAction = null;
+      state.monkeys = state.monkeys.filter((item) => item.id !== monkey.id);
       player.deserters += 1;
     }
     return;

@@ -1,7 +1,6 @@
 import {
   GOLD_FACTION_ID,
   PLAYER_FACTION_ID,
-  SHADOW_FACTION_ID,
   STONE_FACTION_ID,
 } from "./constants";
 import type { Area, AreaId, GameState } from "./types";
@@ -274,7 +273,7 @@ export const MAP_AREAS: Area[] = [
     shortName: "Bosque",
     terrain: "floresta",
     image: bananeirasImage,
-    ownerFactionId: SHADOW_FACTION_ID,
+    ownerFactionId: null,
     adjacentAreaIds: ["ruinas", "montanha", "trovao"],
     currentFood: 12,
     maxFood: 17,
@@ -285,7 +284,7 @@ export const MAP_AREAS: Area[] = [
     knownByPlayer: true,
     visibleMonkeyIds: [],
     hiddenMonkeyIds: [],
-    specialFeature: "Área interna usada por eventos, emboscadas e espionagem.",
+    specialFeature: "Trilhas altas com cobertura boa para patrulhas e exploracao.",
   },
   {
     id: "trovao",

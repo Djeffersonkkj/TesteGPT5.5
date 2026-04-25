@@ -2,7 +2,6 @@ import type { GroupActionType, Role, Species, Terrain, ToolName } from "./types"
 
 export const PLAYER_FACTION_ID = "player";
 export const STONE_FACTION_ID = "stone";
-export const SHADOW_FACTION_ID = "shadow";
 export const GOLD_FACTION_ID = "gold";
 
 export const ROLES: Role[] = [

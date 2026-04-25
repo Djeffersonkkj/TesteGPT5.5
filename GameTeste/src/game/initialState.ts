@@ -3,7 +3,6 @@ import {
   GOLD_FACTION_ID,
   PLAYER_FACTION_ID,
   PLAYER_NAMES,
-  SHADOW_FACTION_ID,
   SPECIES_PROFILES,
   STONE_FACTION_ID,
 } from "./constants";
@@ -45,8 +44,8 @@ function createFaction(
     food: baseFood(isPlayer ? 26 : 22),
     morale: isPlayer ? 62 : 58,
     reputation: isPlayer ? 0 : -4,
-    intimidation: aiPersonality === "stone" ? 18 : aiPersonality === "shadow" ? 4 : 8,
-    stealthBias: aiPersonality === "shadow" ? 18 : aiPersonality === "stone" ? -6 : 4,
+    intimidation: aiPersonality === "stone" ? 18 : 8,
+    stealthBias: aiPersonality === "stone" ? -6 : 4,
     diplomacyBias: aiPersonality === "gold" ? 18 : aiPersonality === "stone" ? -8 : 4,
     inventory: {},
     relations: {},
@@ -73,11 +72,8 @@ function wireRelations(factions: Faction[]): void {
   };
 
   set(PLAYER_FACTION_ID, STONE_FACTION_ID, -20);
-  set(PLAYER_FACTION_ID, SHADOW_FACTION_ID, -8);
   set(PLAYER_FACTION_ID, GOLD_FACTION_ID, 8);
-  set(STONE_FACTION_ID, SHADOW_FACTION_ID, -35);
   set(STONE_FACTION_ID, GOLD_FACTION_ID, -12);
-  set(SHADOW_FACTION_ID, GOLD_FACTION_ID, -4);
 }
 
 function createMonkey(
@@ -175,13 +171,6 @@ function createEnemyMonkeys(): Monkey[] {
     "Urgo",
   );
   addGroup(
-    SHADOW_FACTION_ID,
-    ["bosque"],
-    ["Gibão", "Macaco-prego", "Gibão", "Chimpanzé"],
-    9,
-    "Ssha",
-  );
-  addGroup(
     GOLD_FACTION_ID,
     ["campo"],
     ["Chimpanzé", "Macaco-prego", "Gibão", "Mandril"],
@@ -203,7 +192,6 @@ export function createInitialState(options: StartOptions): GameState {
       true,
     ),
     createFaction(STONE_FACTION_ID, "Punho de Pedra", "#b5152b", "#3a0711", "stone"),
-    createFaction(SHADOW_FACTION_ID, "Sombra das Copas", "#416a59", "#10231b", "shadow"),
     createFaction(GOLD_FACTION_ID, "Fruto Dourado", "#e4c72f", "#3c3000", "gold"),
   ];
   wireRelations(factions);
@@ -213,7 +201,7 @@ export function createInitialState(options: StartOptions): GameState {
     "A tribo acordou no Vale das Frutas com um estoque curto e muitas bocas para alimentar.",
   );
   report.confirmed.push(
-    "Batedores confirmaram a presença do Punho de Pedra, da Sombra das Copas e do Fruto Dourado na ilha.",
+    "Batedores confirmaram a presença do Punho de Pedra e do Fruto Dourado na ilha.",
   );
   report.rumors.push("Peregrinos dizem que a Floresta das Bananeiras ainda tem cachos suficientes para poucos dias.");
   report.suspicions.push("Alguém contou marcas recentes perto do estoque, mas ninguém sabe de qual facção eram.");
