@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { GROUP_ACTION_LABELS } from "../game/constants";
 import { addGroupPlan, removeGroupPlan, suggestMonkeysForAction } from "../game/actions";
+import { canActInArea, getPlayerMainAreaId, normalizeAreaId } from "../game/map";
 import type { GameState, GroupActionType } from "../game/types";
 import { livingFactionMonkeys } from "../game/utils";
 
@@ -15,6 +16,9 @@ export default function GroupActionPanel({ state, onChange }: Props) {
   const [actionType, setActionType] = useState<GroupActionType>("collect");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const area = state.areas.find((item) => item.id === state.selectedAreaId)!;
+  const originAreaId = getPlayerMainAreaId(state);
+  const originArea = state.areas.find((item) => item.id === originAreaId);
+  const canReachSelectedArea = canActInArea(originAreaId, area.id);
 
   useEffect(() => {
     setSelectedIds([]);
@@ -23,9 +27,12 @@ export default function GroupActionPanel({ state, onChange }: Props) {
   const available = useMemo(
     () =>
       livingFactionMonkeys(state, state.playerFactionId).filter(
-        (monkey) => monkey.status !== "inconsciente" && monkey.plannedAction?.kind !== "group",
+        (monkey) =>
+          normalizeAreaId(monkey.locationId) === originAreaId &&
+          monkey.status !== "inconsciente" &&
+          monkey.plannedAction?.kind !== "group",
       ),
-    [state],
+    [state, originAreaId],
   );
 
   const toggle = (id: string) => {
@@ -53,6 +60,11 @@ export default function GroupActionPanel({ state, onChange }: Props) {
         <span className="mini-help">{state.groupPlans.length} planejada(s)</span>
       </div>
 
+      <p className={canReachSelectedArea ? "reach-note" : "reach-note blocked"}>
+        Partida: {originArea?.shortName ?? "?"}.{" "}
+        {canReachSelectedArea ? "Área alcançável hoje." : "Movimento direto bloqueado."}
+      </p>
+
       <div className="toolbar">
         <label>
           Ação
@@ -64,7 +76,7 @@ export default function GroupActionPanel({ state, onChange }: Props) {
             ))}
           </select>
         </label>
-        <button className="ghost-button" onClick={suggest}>
+        <button className="ghost-button" disabled={!canReachSelectedArea || available.length === 0} onClick={suggest}>
           Sugerir melhores
         </button>
       </div>
@@ -85,7 +97,11 @@ export default function GroupActionPanel({ state, onChange }: Props) {
         ))}
       </div>
 
-      <button className="primary-button full-button" disabled={selectedIds.length === 0} onClick={confirm}>
+      <button
+        className="primary-button full-button"
+        disabled={selectedIds.length === 0 || !canReachSelectedArea}
+        onClick={confirm}
+      >
         Confirmar grupo ({selectedIds.length})
       </button>
 

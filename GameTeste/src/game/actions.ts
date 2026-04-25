@@ -1,12 +1,13 @@
 import { ACTION_ROLE_HINT } from "./constants";
-import type { GameState, GroupActionType, Role } from "./types";
+import { canActInArea, getPlayerMainAreaId, normalizeAreaId } from "./map";
+import type { AreaId, GameState, GroupActionType, Role } from "./types";
 import { cloneState, getMonkey, livingFactionMonkeys, pushLog, uid } from "./utils";
 
 function canReceiveOrder(status: string): boolean {
   return status !== "morto" && status !== "inconsciente";
 }
 
-export function selectArea(state: GameState, areaId: string): GameState {
+export function selectArea(state: GameState, areaId: AreaId): GameState {
   const next = cloneState(state);
   next.selectedAreaId = areaId;
   return next;
@@ -74,8 +75,10 @@ export function suggestMonkeysForAction(
   actionType: GroupActionType,
   count = 4,
 ): string[] {
+  const originAreaId = getPlayerMainAreaId(state);
   const candidates = livingFactionMonkeys(state, state.playerFactionId).filter(
     (monkey) =>
+      normalizeAreaId(monkey.locationId) === originAreaId &&
       monkey.energy > 12 &&
       monkey.status !== "inconsciente" &&
       monkey.status !== "morto" &&
@@ -114,24 +117,32 @@ export function suggestMonkeysForAction(
 export function addGroupPlan(
   state: GameState,
   actionType: GroupActionType,
-  areaId: string,
+  areaId: AreaId,
   monkeyIds: string[],
 ): GameState {
   const next = cloneState(state);
+  const originAreaId = getPlayerMainAreaId(next);
+  const targetAreaId = normalizeAreaId(areaId);
+
+  if (!canActInArea(originAreaId, targetAreaId)) {
+    pushLog(next, "Os macacos só podem se mover para uma área adjacente.");
+    return next;
+  }
+
   const ids = [...new Set(monkeyIds)].filter((id) => {
     const monkey = next.monkeys.find((item) => item.id === id);
-    return monkey && canReceiveOrder(monkey.status);
+    return monkey && canReceiveOrder(monkey.status) && normalizeAreaId(monkey.locationId) === originAreaId;
   });
 
   if (ids.length === 0) {
-    pushLog(next, "Nenhuma ação em grupo foi criada: escolha macacos disponíveis.");
+    pushLog(next, "Nenhuma ação em grupo foi criada: escolha macacos disponíveis na área de partida.");
     return next;
   }
 
   const plan = {
     id: uid("group"),
     actionType,
-    areaId,
+    areaId: targetAreaId,
     monkeyIds: ids,
   };
   next.groupPlans.push(plan);

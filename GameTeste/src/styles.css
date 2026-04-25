@@ -257,7 +257,7 @@ select {
   align-items: center;
   gap: 16px;
   margin: 0 auto 16px;
-  max-width: 1580px;
+  max-width: 1760px;
 }
 
 .topbar h1 {
@@ -271,10 +271,10 @@ select {
 }
 
 .main-layout {
-  max-width: 1580px;
+  max-width: 1760px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(620px, 1.15fr) minmax(260px, 0.5fr) minmax(440px, 0.85fr);
+  grid-template-columns: minmax(920px, 1.15fr) minmax(260px, 0.5fr) minmax(440px, 0.85fr);
   gap: 16px;
   align-items: start;
 }
@@ -292,6 +292,10 @@ select {
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 10px 25px rgba(70, 52, 27, 0.08);
+}
+
+.map-panel {
+  overflow-x: auto;
 }
 
 .panel-title-row {
@@ -314,119 +318,85 @@ select {
 
 .hex-map {
   position: relative;
-  min-width: 636px;
-  height: 560px;
+  width: min(100%, 960px);
+  min-width: 920px;
+  height: 520px;
+  margin: 0 auto;
   overflow: hidden;
   border-radius: 8px;
   background:
-    linear-gradient(130deg, rgba(59, 112, 92, 0.18), rgba(216, 154, 36, 0.2)),
-    #e7d7b6;
-  border: 1px solid #cfbb95;
+    linear-gradient(180deg, rgba(125, 185, 199, 0.3), rgba(68, 126, 103, 0.24)),
+    #d9e6cc;
+  border: 1px solid #bfd0b1;
 }
 
 .hex-tile {
   position: absolute;
-  width: 118px;
-  height: 104px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 2px;
-  padding: 13px 14px;
+  display: block;
+  padding: 0;
   border: 0;
-  color: #1c1712;
+  background: transparent;
+  color: var(--ink);
   text-align: center;
-  clip-path: polygon(25% 2%, 75% 2%, 100% 50%, 75% 98%, 25% 98%, 0 50%);
-  box-shadow: inset 0 0 0 5px rgba(255, 255, 255, 0.22);
   transition:
-    transform 150ms ease,
-    filter 150ms ease;
+    transform 180ms ease,
+    filter 180ms ease,
+    opacity 180ms ease;
 }
 
-.hex-tile::after {
-  content: "";
-  position: absolute;
-  inset: 8px;
-  clip-path: polygon(25% 2%, 75% 2%, 100% 50%, 75% 98%, 25% 98%, 0 50%);
-  border: 4px solid var(--owner-color);
-  opacity: 0.88;
-  pointer-events: none;
+.hex-tile::before {
+  content: none;
 }
 
-.hex-tile:hover,
+.hex-tile:hover {
+  transform: translateY(-6px) scale(1.04);
+  filter: brightness(1.08);
+  z-index: 4;
+}
+
 .hex-tile.selected {
-  transform: translateY(-4px);
-  filter: brightness(1.06) saturate(1.06);
-  z-index: 3;
+  transform: translateY(-10px) scale(1.08);
+  filter:
+    brightness(1.15)
+    drop-shadow(0 0 14px rgba(255, 230, 120, 0.95));
+  z-index: 10;
 }
 
-.hex-tile.selected::after {
-  border-color: #ffffff;
-  box-shadow: 0 0 0 4px var(--owner-color);
+.hex-tile.selected::before {
+  content: none;
 }
 
-.hex-icon {
-  font-weight: 900;
-  font-size: 1.1rem;
+.hex-tile.reachable:not(.selected)::before {
+  content: none;
 }
 
-.hex-tile strong {
-  width: 88px;
-  font-size: 0.83rem;
-  line-height: 1.05;
-  overflow-wrap: anywhere;
+.hex-tile.reachable:not(.selected) img {
+  filter: drop-shadow(0 0 8px rgba(61, 144, 210, 0.48));
 }
 
-.hex-food,
-.hex-owner,
-.hex-counts {
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.68rem;
-  font-weight: 800;
+.hex-tile.current-origin img {
+  filter: drop-shadow(0 0 10px rgba(40, 200, 90, 0.62));
 }
 
-.hex-owner {
-  color: rgba(0, 0, 0, 0.68);
+.hex-tile.base-player img {
+  filter: drop-shadow(0 0 10px rgba(40, 200, 90, 0.85));
 }
 
-.terrain-forest {
-  background: linear-gradient(145deg, #7bc46f, #2f7d4f);
+.hex-tile.base-enemy-red img {
+  filter: drop-shadow(0 0 10px rgba(210, 40, 40, 0.85));
 }
 
-.terrain-swamp {
-  background: linear-gradient(145deg, #8aa36b, #476b69);
+.hex-tile.base-enemy-yellow img {
+  filter: drop-shadow(0 0 10px rgba(230, 210, 40, 0.85));
 }
 
-.terrain-mountain {
-  background: linear-gradient(145deg, #b9a48b, #6f655b);
-}
-
-.terrain-beach {
-  background: linear-gradient(145deg, #f2dc8e, #6aa9a7);
-}
-
-.terrain-ruins {
-  background: linear-gradient(145deg, #b8b0a0, #776f65);
-}
-
-.terrain-river {
-  background: linear-gradient(145deg, #77c6d1, #257ca1);
-}
-
-.terrain-field {
-  background: linear-gradient(145deg, #d2c46b, #7ba458);
-}
-
-.terrain-village {
-  background: linear-gradient(145deg, #e8a84f, #b97037);
-}
-
-.terrain-cave {
-  background: linear-gradient(145deg, #8b7869, #2f3132);
-  color: #fff8e7;
+.hex-tile img {
+  position: absolute;
+  inset: 3px 0 auto;
+  width: 100%;
+  height: 140px;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .stat-grid {
@@ -459,6 +429,21 @@ select {
 
 .visible-list {
   align-items: center;
+}
+
+.reach-note {
+  margin: 0 0 10px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #e7f5ec;
+  color: #225b3e;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.reach-note.blocked {
+  background: #fff0d1;
+  color: #875d00;
 }
 
 .tag {
@@ -803,7 +788,7 @@ meter {
   margin-bottom: 20px;
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 1700px) {
   .main-layout {
     grid-template-columns: minmax(620px, 1fr) minmax(360px, 0.8fr);
   }

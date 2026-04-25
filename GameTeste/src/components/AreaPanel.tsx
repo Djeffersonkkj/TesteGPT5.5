@@ -1,4 +1,5 @@
 import { TERRAIN_LABELS } from "../game/constants";
+import { canActInArea, getPlayerMainAreaId } from "../game/map";
 import type { Area, GameState } from "../game/types";
 
 interface Props {
@@ -8,6 +9,10 @@ interface Props {
 
 export default function AreaPanel({ area, state }: Props) {
   const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
+  const originAreaId = getPlayerMainAreaId(state);
+  const originArea = state.areas.find((item) => item.id === originAreaId);
+  const isCurrentArea = area.id === originAreaId;
+  const isReachable = canActInArea(originAreaId, area.id);
   const visible = area.visibleMonkeyIds
     .map((id) => state.monkeys.find((monkey) => monkey.id === id))
     .filter(Boolean);
@@ -25,6 +30,10 @@ export default function AreaPanel({ area, state }: Props) {
         </strong>
         <span>Dono</span>
         <strong>{owner?.name ?? "Neutro"}</strong>
+        <span>Alcance</span>
+        <strong>{isCurrentArea ? "Área atual" : isReachable ? "Adjacente" : "Distante"}</strong>
+        <span>Partida</span>
+        <strong>{originArea?.shortName ?? "?"}</strong>
         <span>Perigo</span>
         <strong>{area.dangerLevel}</strong>
         <span>Furtividade</span>

@@ -52,7 +52,7 @@ export function resolveInternalEvents(state: GameState, report: DailyReport): vo
 
   if (suspect.loyalty < 28 && roll(0.45)) {
     suspect.factionId = SHADOW_FACTION_ID;
-    suspect.locationId = "bosque-alto";
+    suspect.locationId = "bosque";
     suspect.role = null;
     suspect.persistentRole = null;
     suspect.plannedAction = null;

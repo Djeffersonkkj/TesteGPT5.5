@@ -1,13 +1,45 @@
-import { TERRAIN_CLASS, TERRAIN_ICONS } from "../game/constants";
-import type { GameState } from "../game/types";
+import {
+  canActInArea,
+  getPlayerMainAreaId,
+  isVisualArea,
+} from "../game/map";
+import type { AreaId, GameState } from "../game/types";
 
 interface Props {
   state: GameState;
-  selectedAreaId: string;
-  onSelect: (areaId: string) => void;
+  selectedAreaId: AreaId;
+  onSelect: (areaId: AreaId) => void;
+}
+
+const TILE_W = 170;
+const TILE_H = 150;
+const X_GAP = 112;
+const Y_GAP = 104;
+
+function getTilePosition(row: number, col: number) {
+  return {
+    left: col * X_GAP + 46,
+    top: (row - 1) * Y_GAP + 18,
+  };
+}
+
+function baseClass(ownerFactionId: string | null, playerFactionId: string): string {
+  if (ownerFactionId === playerFactionId) {
+    return "base-player";
+  }
+  if (ownerFactionId === "stone") {
+    return "base-enemy-red";
+  }
+  if (ownerFactionId === "gold") {
+    return "base-enemy-yellow";
+  }
+  return "";
 }
 
 export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
+  const playerOriginAreaId = getPlayerMainAreaId(state);
+  const visualAreas = state.areas.filter(isVisualArea);
+
   return (
     <section className="panel map-panel">
       <div className="panel-title-row">
@@ -15,37 +47,38 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
           <p className="eyebrow">mapa fixo</p>
           <h2>Ilha Hexagonal</h2>
         </div>
-        <span className="mini-help">clique numa área</span>
+        <span className="mini-help">posição: {state.areas.find((area) => area.id === playerOriginAreaId)?.shortName}</span>
       </div>
       <div className="hex-map" aria-label="Mapa da ilha">
-        {state.areas.map((area) => {
+        {visualAreas.map((area) => {
           const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
-          const visibleMonkeys = area.visibleMonkeyIds
-            .map((id) => state.monkeys.find((monkey) => monkey.id === id))
-            .filter(Boolean);
-          const playerCount = visibleMonkeys.filter((monkey) => monkey?.factionId === state.playerFactionId).length;
-          const enemyCount = visibleMonkeys.filter((monkey) => monkey?.factionId !== state.playerFactionId).length;
-          const left = area.x * 112 + (area.y % 2) * 56;
-          const top = area.y * 88;
+          const reachable = canActInArea(playerOriginAreaId, area.id);
+          const position = getTilePosition(area.visualPosition!.row, area.visualPosition!.col);
 
           return (
             <button
-              className={`hex-tile ${TERRAIN_CLASS[area.terrain]} ${selectedAreaId === area.id ? "selected" : ""}`}
+              aria-label={`${area.name}, ${owner?.name ?? "Neutro"}`}
+              className={[
+                "hex-tile",
+                selectedAreaId === area.id ? "selected" : "",
+                reachable ? "reachable" : "",
+                area.id === playerOriginAreaId ? "current-origin" : "",
+                area.isStartingBase ? "starting-base" : "",
+                baseClass(area.ownerFactionId, state.playerFactionId),
+              ]
+                .filter(Boolean)
+                .join(" ")}
               key={area.id}
               onClick={() => onSelect(area.id)}
               style={{
-                left,
-                top,
+                left: position.left,
+                top: position.top,
+                width: TILE_W,
+                height: TILE_H,
                 ["--owner-color" as string]: owner?.color ?? "#b6b0a4",
               }}
             >
-              <span className="hex-icon">{TERRAIN_ICONS[area.terrain]}</span>
-              <strong>{area.shortName}</strong>
-              <span className="hex-food">🍌 {area.knownByPlayer ? area.currentFood : "?"}</span>
-              <span className="hex-owner">{owner?.name ?? "Neutro"}</span>
-              <span className="hex-counts">
-                <b>{playerCount}</b> seus · <b>{enemyCount}</b> rivais
-              </span>
+              <img alt="" src={area.image} />
             </button>
           );
         })}

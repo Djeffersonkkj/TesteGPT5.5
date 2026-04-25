@@ -16,6 +16,20 @@ export type Terrain =
   | "aldeia"
   | "caverna";
 
+export type AreaId =
+  | "aldeia-cipo"
+  | "bananeiras"
+  | "pantano"
+  | "ruinas"
+  | "montanha"
+  | "praia"
+  | "vale"
+  | "caverna"
+  | "rio"
+  | "campo"
+  | "bosque"
+  | "trovao";
+
 export type MonkeyStatus =
   | "normal"
   | "ferido"
@@ -65,7 +79,7 @@ export type PlannedAction =
       kind: "group";
       groupActionId: string;
       actionType: GroupActionType;
-      areaId: string;
+      areaId: AreaId;
     };
 
 export interface FoodStock {
@@ -77,12 +91,17 @@ export interface FoodStock {
 }
 
 export interface Area {
-  id: string;
+  id: AreaId;
   name: string;
   shortName: string;
   terrain: Terrain;
-  x: number;
-  y: number;
+  image: string;
+  isStartingBase?: boolean;
+  visualPosition?: {
+    row: number;
+    col: number;
+  };
+  adjacentAreaIds: AreaId[];
   currentFood: number;
   maxFood: number;
   foodRegenRate: number;
@@ -114,7 +133,7 @@ export interface Monkey {
   morale: number;
   hunger: number;
   foodConsumption: number;
-  locationId: string;
+  locationId: AreaId;
   status: MonkeyStatus;
   role: Role | null;
   persistentRole: Role | null;
@@ -160,13 +179,13 @@ export interface DailyReport {
 export interface GroupActionPlan {
   id: string;
   actionType: GroupActionType;
-  areaId: string;
+  areaId: AreaId;
   monkeyIds: string[];
 }
 
 export interface PendingCombat {
   id: string;
-  areaId: string;
+  areaId: AreaId;
   attackerFactionId: string;
   defenderFactionId: string;
   playerSide: "attacker" | "defender";
@@ -189,7 +208,7 @@ export interface GameState {
   day: number;
   phase: GamePhase;
   playerFactionId: string;
-  selectedAreaId: string;
+  selectedAreaId: AreaId;
   areas: Area[];
   factions: Faction[];
   monkeys: Monkey[];

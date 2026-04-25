@@ -3,9 +3,11 @@ import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SPECIES_PROFILES, 
 import { resolveCombatRound, type CombatOption } from "./combat";
 import { applyHungerAndRecovery, regenerateAreaFood, summarizeFactionRelations } from "./economy";
 import { resolveInternalEvents } from "./events";
+import { canActInArea, getPlayerMainAreaId } from "./map";
 import { createReport, ensureReportHasContent } from "./reports";
 import type {
   DailyReport,
+  AreaId,
   Faction,
   GameOverInfo,
   GameState,
@@ -54,7 +56,7 @@ function addToolToFaction(faction: Faction, tool: ToolName): void {
   faction.inventory[tool] = (faction.inventory[tool] ?? 0) + 1;
 }
 
-function createRecruit(factionId: string, locationId: string): Monkey {
+function createRecruit(factionId: string, locationId: AreaId): Monkey {
   const species: Species = sample(["Chimpanzé", "Macaco-prego", "Gibão", "Mandril"]);
   const profile = SPECIES_PROFILES[species];
   return {
@@ -266,7 +268,7 @@ function resolveGroupRecruit(
   const members = groupMembers(state, plan);
   const charisma = members.reduce((sum, monkey) => sum + monkey.charisma + monkey.morale / 25, 0);
   const food = foodTotal(getFaction(state, state.playerFactionId));
-  const caveBonus = area.id === "caverna-exilados" ? 12 : 0;
+  const caveBonus = area.id === "caverna" ? 12 : 0;
   members.forEach((monkey) => {
     monkey.locationId = area.id;
   });
@@ -603,6 +605,12 @@ export function endDay(state: GameState): GameState {
 
   const report = createReport(next.day);
   regenerateAreaFood(next);
+  const originAreaId = getPlayerMainAreaId(next);
+  const blockedPlans = next.groupPlans.filter((plan) => !canActInArea(originAreaId, plan.areaId));
+  if (blockedPlans.length > 0) {
+    report.suspicions.push("Algumas ações foram canceladas: os macacos só podem se mover para áreas adjacentes.");
+    next.groupPlans = next.groupPlans.filter((plan) => canActInArea(originAreaId, plan.areaId));
+  }
 
   next.groupPlans
     .filter((plan) => plan.actionType !== "attack")
