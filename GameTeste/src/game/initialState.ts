@@ -258,7 +258,11 @@ function roleForSpecies(species: MonkeySpecies, archetype: FactionArchetype, isL
 }
 
 function nextName(pool: string[], index: number, usedNames: Set<string>): string {
-  const base = pool[index % pool.length] ?? `Macaco ${index + 1}`;
+  const available = pool.filter((name) => !usedNames.has(name));
+  const base =
+    available.length > 0
+      ? available[Math.floor(Math.random() * available.length)]
+      : pool[index % pool.length] ?? `Macaco ${index + 1}`;
   if (!usedNames.has(base)) {
     usedNames.add(base);
     return base;
@@ -397,7 +401,6 @@ export function createInitialState(options: StartOptions): GameState {
       faction: stoneFaction,
       archetype: STONE_ARCHETYPE,
       count: 10,
-      leaderSpecies: "Gorila",
       startingAreaId: "montanha",
       includeLeader: true,
     }),
@@ -405,7 +408,6 @@ export function createInitialState(options: StartOptions): GameState {
       faction: goldFaction,
       archetype: GOLD_ARCHETYPE,
       count: 10,
-      leaderSpecies: "Chimpanzé",
       startingAreaId: "campo",
       includeLeader: true,
     }),

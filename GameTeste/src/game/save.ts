@@ -7,7 +7,7 @@ import { syncAreaMonkeyVisibility } from "./utils";
 
 const SAVE_KEY = "ilha-dos-macacos-save-v1";
 const STONE_FACTION_ID = "stone";
-const SHADOW_FACTION_ID = "shadow";
+const REMOVED_FACTION_IDS = new Set(["shadow"]);
 
 type SavedArea = Partial<Area> & { id?: string };
 
@@ -40,7 +40,7 @@ function normalizeSavedGame(state: GameState): GameState {
       if ((area.id === "aldeia-cipo" || area.id === "trovao") && saved?.ownerFactionId === STONE_FACTION_ID) {
         return area.ownerFactionId;
       }
-      if (saved?.ownerFactionId === SHADOW_FACTION_ID) {
+      if (saved?.ownerFactionId && REMOVED_FACTION_IDS.has(saved.ownerFactionId)) {
         return area.ownerFactionId;
       }
       if (area.id === "montanha" && saved?.ownerFactionId == null) {
@@ -73,15 +73,15 @@ function normalizeSavedGame(state: GameState): GameState {
 
   state.selectedAreaId = normalizeSavedAreaRef(String(state.selectedAreaId), legacyMap, true);
   state.factions = (state.factions ?? [])
-    .filter((faction) => faction.id !== SHADOW_FACTION_ID)
+    .filter((faction) => !REMOVED_FACTION_IDS.has(faction.id))
     .map((faction) => ({
       ...faction,
       relations: Object.fromEntries(
-        Object.entries(faction.relations ?? {}).filter(([factionId]) => factionId !== SHADOW_FACTION_ID),
+        Object.entries(faction.relations ?? {}).filter(([factionId]) => !REMOVED_FACTION_IDS.has(factionId)),
       ),
     }));
 
-  state.monkeys = (state.monkeys ?? []).filter((monkey) => monkey.factionId !== SHADOW_FACTION_ID).map((monkey) => {
+  state.monkeys = (state.monkeys ?? []).filter((monkey) => !REMOVED_FACTION_IDS.has(monkey.factionId)).map((monkey) => {
     const savedLocationId = normalizeSavedAreaRef(
       String(monkey.locationId),
       legacyMap,
@@ -133,12 +133,12 @@ function normalizeSavedGame(state: GameState): GameState {
       areaId: normalizeAreaId(state.pendingCombat.areaId),
     };
     const existingMonkeyIds = new Set(state.monkeys.map((monkey) => monkey.id));
-    const removedShadowCombat =
-      combat.attackerFactionId === SHADOW_FACTION_ID || combat.defenderFactionId === SHADOW_FACTION_ID;
+    const removedFactionCombat =
+      REMOVED_FACTION_IDS.has(combat.attackerFactionId) || REMOVED_FACTION_IDS.has(combat.defenderFactionId);
     const missingCombatants = [...combat.playerMonkeyIds, ...combat.enemyMonkeyIds].some(
       (monkeyId) => !existingMonkeyIds.has(monkeyId),
     );
-    state.pendingCombat = removedShadowCombat || missingCombatants ? null : combat;
+    state.pendingCombat = removedFactionCombat || missingCombatants ? null : combat;
     if (state.phase === "combat" && !state.pendingCombat) {
       state.phase = "planning";
       state.workingReport = null;
