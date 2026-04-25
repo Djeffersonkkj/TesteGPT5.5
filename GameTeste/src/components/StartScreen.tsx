@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ASSETS } from "../game/assets";
 import { SPECIES_PROFILES } from "../game/constants";
 import type { Species } from "../game/types";
 
@@ -18,12 +19,21 @@ export default function StartScreen({ canContinue, onContinue, onStart }: Props)
   return (
     <main className="start-screen">
       <section className="start-panel">
-        <p className="eyebrow">jogo de tabuleiro narrativo</p>
-        <h1>Ilha dos Macacos</h1>
-        <p className="start-copy">
-          Comande uma facção de macacos por até 100 dias. Leia relatórios, distribua funções,
-          dispute comida e sobreviva às outras tribos da ilha.
-        </p>
+        <div className="start-hero">
+          <div>
+            <p className="eyebrow">jogo de tabuleiro narrativo</p>
+            <h1>Ilha dos Macacos</h1>
+            <p className="start-copy">
+              Comande uma facção de macacos por até 100 dias. Leia relatórios, distribua funções,
+              dispute comida e sobreviva às outras tribos da ilha.
+            </p>
+          </div>
+          <div className="start-art" aria-hidden="true">
+            <img src={ASSETS.monkeys[0]} alt="" />
+            <img src={ASSETS.factions.player} alt="" />
+            <img src={ASSETS.monkeys[5]} alt="" />
+          </div>
+        </div>
 
         <div className="start-grid">
           <label>

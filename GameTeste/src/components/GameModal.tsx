@@ -23,7 +23,7 @@ export default function GameModal({ title, eyebrow, children, onClose, wide = fa
             <h2>{title}</h2>
           </div>
           <button className="icon-button" aria-label="Fechar" onClick={onClose}>
-            x
+            ×
           </button>
         </div>
         <div className="modal-content">{children}</div>

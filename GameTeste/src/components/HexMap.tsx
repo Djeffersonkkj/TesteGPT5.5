@@ -57,6 +57,7 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
       <div className="hex-map" aria-label="Mapa da ilha">
         {visualAreas.map((area) => {
           const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
+          const ownerIcon = factionFlag(area.ownerFactionId);
           const hasPlayerHere = playerMonkeys.some((monkey) => normalizeAreaId(monkey.locationId) === area.id);
           const playerCount = playerMonkeys.filter((monkey) => normalizeAreaId(monkey.locationId) === area.id).length;
           const reachable = playerMonkeys.some((monkey) => {
@@ -89,9 +90,8 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
               }}
             >
               <img alt="" src={area.image} />
-              <span className="area-ribbon">
-                {factionFlag(area.ownerFactionId) && <img alt="" src={factionFlag(area.ownerFactionId)} />}
-                <b>{area.shortName}</b>
+              <span className="area-ribbon" title={owner?.name ?? "Neutro"}>
+                {ownerIcon ? <img alt="" src={ownerIcon} /> : <span className="neutral-owner-dot" />}
               </span>
               {playerCount > 0 && (
                 <span className="unit-count">
