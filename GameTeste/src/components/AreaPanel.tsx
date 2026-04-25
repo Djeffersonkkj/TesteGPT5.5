@@ -32,6 +32,10 @@ export default function AreaPanel({ area, state }: Props) {
         <strong>
           {area.currentFood}/{area.maxFood}
         </strong>
+        <span>Bananas/dia</span>
+        <strong>
+          {area.currentBananaProduction}/{area.baseBananaProduction}
+        </strong>
         <span>Dono</span>
         <strong>{owner?.name ?? "Neutro"}</strong>
         <span>Alcance</span>

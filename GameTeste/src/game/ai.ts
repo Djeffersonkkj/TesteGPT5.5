@@ -24,7 +24,9 @@ function richestAreaFor(state: GameState, faction: Faction) {
   if (owned.length === 0) {
     return sample(state.areas);
   }
-  return [...owned].sort((a, b) => b.currentFood - a.currentFood)[0];
+  return [...owned].sort(
+    (a, b) => b.currentBananaProduction + b.currentFood - (a.currentBananaProduction + a.currentFood),
+  )[0];
 }
 
 function collectForFaction(state: GameState, faction: Faction, report: DailyReport): void {
@@ -48,7 +50,13 @@ function stoneTurn(state: GameState, faction: Faction, report: DailyReport): voi
   const hungry = foodTotal(faction) < livingFactionMonkeys(state, faction.id).length * 1.5;
   const target = [...state.areas]
     .filter((area) => area.ownerFactionId !== faction.id)
-    .sort((a, b) => b.currentFood + b.combatModifier - (a.currentFood + a.combatModifier))[0];
+    .sort(
+      (a, b) =>
+        b.currentBananaProduction +
+        b.currentFood +
+        b.combatModifier -
+        (a.currentBananaProduction + a.currentFood + a.combatModifier),
+    )[0];
 
   if ((hungry || roll(0.45)) && target) {
     const previousOwner = target.ownerFactionId;
@@ -61,6 +69,7 @@ function stoneTurn(state: GameState, faction: Faction, report: DailyReport): voi
 
     if (attackPower > defensePower || roll(0.35)) {
       target.ownerFactionId = faction.id;
+      target.controlledByFactionId = faction.id;
       attackers.forEach((monkey) => {
         monkey.locationId = target.id;
         monkey.energy = clamp(monkey.energy - 12, 0, monkey.maxEnergy);
@@ -101,6 +110,7 @@ function goldTurn(state: GameState, faction: Faction, report: DailyReport): void
     const neutral = state.areas.find((area) => area.ownerFactionId === null);
     if (neutral) {
       neutral.ownerFactionId = faction.id;
+      neutral.controlledByFactionId = faction.id;
       report.rumors.push(`${faction.name} convenceu peregrinos a ocupar ${neutral.name}.`);
       return;
     }

@@ -537,6 +537,7 @@ export function applyCombatConsequences(state: GameState, report: DailyReport): 
 
   if (result.territoryChanged) {
     area.ownerFactionId = result.outcome === "victory" ? state.playerFactionId : combat.attackerFactionId;
+    area.controlledByFactionId = area.ownerFactionId;
   }
 
   if (result.foodDelta > 0) {

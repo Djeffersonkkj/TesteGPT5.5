@@ -130,6 +130,7 @@ export interface Area {
   name: string;
   shortName: string;
   terrain: Terrain;
+  biome?: string;
   image: string;
   isStartingBase?: boolean;
   visualPosition?: {
@@ -140,14 +141,29 @@ export interface Area {
   currentFood: number;
   maxFood: number;
   foodRegenRate: number;
+  baseBananaProduction: number;
+  currentBananaProduction: number;
+  minimumBananaProduction: number;
+  scarcityRate: number;
   dangerLevel: number;
   stealthModifier: number;
   combatModifier: number;
   ownerFactionId: string | null;
+  controlledByFactionId?: string | null;
   knownByPlayer: boolean;
   visibleMonkeyIds: string[];
   hiddenMonkeyIds: string[];
   specialFeature: string;
+}
+
+export type MapArea = Area;
+
+export interface FactionFoodResult {
+  factionId: string;
+  areaId: AreaId;
+  bananasGained: number;
+  monkeyCount: number;
+  percentage: number;
 }
 
 export interface Monkey {

@@ -57,7 +57,7 @@ export const SPECIES_PROFILES: Record<
     stealth: 1,
     intelligence: 3,
     charisma: 4,
-    foodConsumption: 2,
+    foodConsumption: 4,
     text: "HP e combate altos, furtividade baixa, intimidação forte.",
   },
   Chimpanzé: {
@@ -67,7 +67,7 @@ export const SPECIES_PROFILES: Record<
     stealth: 4,
     intelligence: 6,
     charisma: 6,
-    foodConsumption: 1,
+    foodConsumption: 2,
     text: "Equilibrado, bom líder, inteligente e carismático.",
   },
   "Macaco-prego": {
@@ -77,7 +77,7 @@ export const SPECIES_PROFILES: Record<
     stealth: 6,
     intelligence: 8,
     charisma: 4,
-    foodConsumption: 1,
+    foodConsumption: 1.5,
     text: "Muito inteligente, bom com ferramentas e furtivo.",
   },
   Mandril: {
@@ -87,7 +87,7 @@ export const SPECIES_PROFILES: Record<
     stealth: 3,
     intelligence: 4,
     charisma: 3,
-    foodConsumption: 1.5,
+    foodConsumption: 2.5,
     text: "Ataque e intimidação altos, moral mais instável.",
   },
   Gibão: {
@@ -97,7 +97,7 @@ export const SPECIES_PROFILES: Record<
     stealth: 8,
     intelligence: 5,
     charisma: 5,
-    foodConsumption: 0.75,
+    foodConsumption: 1,
     text: "Ágil, furtivo e excelente explorador.",
   },
 };

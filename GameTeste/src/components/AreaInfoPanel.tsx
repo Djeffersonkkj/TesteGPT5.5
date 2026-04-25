@@ -90,6 +90,12 @@ export default function AreaInfoPanel({ area, state, onPlanAction }: Props) {
         <strong>{TERRAIN_LABELS[area.terrain]}</strong>
         <span>Recursos</span>
         <strong>{area.knownByPlayer ? `${area.currentFood}/${area.maxFood}` : "Desconhecido"}</strong>
+        <span>Bananas/dia</span>
+        <strong>
+          {area.knownByPlayer
+            ? `${area.currentBananaProduction}/${area.baseBananaProduction}`
+            : "Desconhecido"}
+        </strong>
         <span>Perigo estimado</span>
         <strong>{area.dangerLevel}/10</strong>
         <span>Na area</span>

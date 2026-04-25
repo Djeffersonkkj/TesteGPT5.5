@@ -1,6 +1,8 @@
 import { createMapAreas, normalizeAreaId } from "./map";
+import { currentBananaProductionForDay } from "./economy";
 import { createReport } from "./reports";
-import type { Area, AreaId, GameState } from "./types";
+import { SPECIES_PROFILES } from "./constants";
+import type { Area, AreaId, GameState, Species } from "./types";
 import { syncAreaMonkeyVisibility } from "./utils";
 
 const SAVE_KEY = "ilha-dos-macacos-save-v1";
@@ -60,7 +62,9 @@ function normalizeSavedGame(state: GameState): GameState {
     return {
       ...area,
       currentFood,
+      currentBananaProduction: currentBananaProductionForDay(area, state.day),
       ownerFactionId,
+      controlledByFactionId: ownerFactionId,
       knownByPlayer: typeof saved?.knownByPlayer === "boolean" ? saved.knownByPlayer : area.knownByPlayer,
       visibleMonkeyIds: [],
       hiddenMonkeyIds: [],
@@ -103,6 +107,7 @@ function normalizeSavedGame(state: GameState): GameState {
     return {
       ...monkey,
       locationId,
+      foodConsumption: SPECIES_PROFILES[monkey.species as Species]?.foodConsumption ?? monkey.foodConsumption,
       plannedAction,
     };
   });

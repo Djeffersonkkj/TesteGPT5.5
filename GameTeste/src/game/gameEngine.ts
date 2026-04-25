@@ -1,7 +1,7 @@
 import { resolveEnemyAI } from "./ai";
 import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SPECIES_PROFILES, TOOLS } from "./constants";
 import { applyCombatConsequences, performPlayerCombatAction, type CombatActionRequest } from "./combat";
-import { applyHungerAndRecovery, regenerateAreaFood, summarizeFactionRelations } from "./economy";
+import { applyHungerAndRecovery, regenerateAreaFood, resolveDailyBananaProduction, summarizeFactionRelations } from "./economy";
 import { generatePendingDecisions } from "./events";
 import { normalizeAreaId } from "./map";
 import { createReport, ensureReportHasContent } from "./reports";
@@ -410,6 +410,7 @@ function createCombatFromPlan(
 
   if (!defenderFactionId) {
     area.ownerFactionId = state.playerFactionId;
+    area.controlledByFactionId = state.playerFactionId;
     attackers.forEach((monkey) => {
       monkey.locationId = area.id;
       monkey.energy = clamp(monkey.energy - 10, 0, monkey.maxEnergy);
@@ -808,6 +809,7 @@ function continueAfterResolution(state: GameState, report: DailyReport): GameSta
 }
 
 export function finalizeDay(state: GameState, report: DailyReport): GameState {
+  resolveDailyBananaProduction(state, report);
   applyHungerAndRecovery(state, report);
   summarizeFactionRelations(state, report);
 

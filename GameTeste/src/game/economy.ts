@@ -1,5 +1,5 @@
 import { PLAYER_FACTION_ID } from "./constants";
-import type { DailyReport, Faction, GameState, Monkey } from "./types";
+import type { DailyReport, Faction, FactionFoodResult, GameState, MapArea, Monkey } from "./types";
 import {
   average,
   clamp,
@@ -7,6 +7,7 @@ import {
   foodTotal,
   getFaction,
   livingFactionMonkeys,
+  pushLog,
   updateMonkeyStatus,
 } from "./utils";
 
@@ -14,6 +15,172 @@ export function regenerateAreaFood(state: GameState): void {
   state.areas.forEach((area) => {
     area.currentFood = clamp(area.currentFood + area.foodRegenRate, 0, area.maxFood);
   });
+}
+
+export function bananaScarcityMultiplier(day: number): number {
+  if (day <= 10) {
+    return 1;
+  }
+  if (day <= 25) {
+    return 0.85;
+  }
+  if (day <= 45) {
+    return 0.7;
+  }
+  if (day <= 70) {
+    return 0.55;
+  }
+  return 0.4;
+}
+
+export function currentBananaProductionForDay(area: MapArea, day: number): number {
+  const scarcityMultiplier = bananaScarcityMultiplier(day);
+  const areaRate = area.scarcityRate > 0 ? area.scarcityRate : 1;
+  return Math.max(
+    area.minimumBananaProduction,
+    Math.floor(area.baseBananaProduction * scarcityMultiplier * areaRate),
+  );
+}
+
+function canCollectDailyBananas(monkey: Monkey): boolean {
+  return (
+    monkey.hp > 1 &&
+    monkey.energy > 8 &&
+    monkey.status !== "morto" &&
+    monkey.status !== "inconsciente" &&
+    monkey.status !== "exausto"
+  );
+}
+
+export function calculateAreaBananaDistribution(area: MapArea, monkeys: Monkey[]): FactionFoodResult[] {
+  const eligible = monkeys.filter(
+    (monkey) => monkey.locationId === area.id && canCollectDailyBananas(monkey),
+  );
+  const totalMonkeys = eligible.length;
+
+  if (totalMonkeys === 0 || area.currentBananaProduction <= 0) {
+    return [];
+  }
+
+  const counts = new Map<string, number>();
+  eligible.forEach((monkey) => {
+    counts.set(monkey.factionId, (counts.get(monkey.factionId) ?? 0) + 1);
+  });
+
+  const production = Math.max(0, Math.floor(area.currentBananaProduction));
+  const shares = [...counts.entries()]
+    .map(([factionId, monkeyCount]) => {
+      const rawShare = (production * monkeyCount) / totalMonkeys;
+      return {
+        factionId,
+        monkeyCount,
+        bananasGained: Math.floor(rawShare),
+        remainder: rawShare - Math.floor(rawShare),
+      };
+    })
+    .sort((a, b) => a.factionId.localeCompare(b.factionId));
+
+  let distributed = shares.reduce((sum, share) => sum + share.bananasGained, 0);
+  [...shares]
+    .sort((a, b) => b.remainder - a.remainder || a.factionId.localeCompare(b.factionId))
+    .forEach((share) => {
+      if (distributed >= production) {
+        return;
+      }
+      share.bananasGained += 1;
+      distributed += 1;
+    });
+
+  return shares.map((share) => ({
+    factionId: share.factionId,
+    areaId: area.id,
+    bananasGained: share.bananasGained,
+    monkeyCount: share.monkeyCount,
+    percentage: (share.monkeyCount / totalMonkeys) * 100,
+  }));
+}
+
+function reportDailyBananaProduction(
+  state: GameState,
+  report: DailyReport,
+  area: MapArea,
+  results: FactionFoodResult[],
+): void {
+  const playerResult = results.find((result) => result.factionId === state.playerFactionId);
+  const enemyResults = results.filter((result) => result.factionId !== state.playerFactionId);
+
+  if (playerResult) {
+    report.confirmed.push(
+      `${area.name} produziu ${area.currentBananaProduction} banana(s); sua tribo recebeu ${playerResult.bananasGained} (${playerResult.percentage.toFixed(0)}%).`,
+    );
+
+    enemyResults.forEach((result) => {
+      const faction = state.factions.find((item) => item.id === result.factionId);
+      report.confirmed.push(
+        `${faction?.name ?? "Uma faccao rival"} tambem colheu ${result.bananasGained} banana(s) em ${area.name}.`,
+      );
+    });
+    return;
+  }
+
+  if (enemyResults.length === 0 || !area.knownByPlayer) {
+    return;
+  }
+
+  const hasKnownRivalPresence = area.visibleMonkeyIds.some((monkeyId) => {
+    const monkey = state.monkeys.find((item) => item.id === monkeyId);
+    return monkey && monkey.factionId !== state.playerFactionId;
+  });
+
+  if (hasKnownRivalPresence) {
+    report.rumors.push(
+      `Vigias viram rivais colhendo em ${area.name}, mas nao confirmaram quantas bananas foram levadas.`,
+    );
+  } else {
+    report.suspicions.push(
+      `Sinais de colheita apareceram em ${area.name}, sem numero confiavel de bananas.`,
+    );
+  }
+}
+
+export function resolveDailyBananaProduction(
+  gameState: GameState,
+  report: DailyReport = gameState.workingReport ?? gameState.report,
+): GameState {
+  let playerBananas = 0;
+  let islandProduction = 0;
+
+  gameState.areas.forEach((area) => {
+    area.currentBananaProduction = currentBananaProductionForDay(area, gameState.day);
+    islandProduction += area.currentBananaProduction;
+
+    const results = calculateAreaBananaDistribution(area, gameState.monkeys);
+    results.forEach((result) => {
+      const faction = gameState.factions.find((item) => item.id === result.factionId);
+      if (!faction || !faction.alive) {
+        return;
+      }
+      faction.food.bananas += result.bananasGained;
+      if (faction.id === gameState.playerFactionId) {
+        playerBananas += result.bananasGained;
+      }
+    });
+
+    reportDailyBananaProduction(gameState, report, area, results);
+  });
+
+  if (playerBananas > 0) {
+    report.hungerSummary.push(
+      `A producao diaria de bananas adicionou ${playerBananas} banana(s) ao estoque da tribo.`,
+    );
+  }
+
+  pushLog(
+    gameState,
+    `A ilha produziu ${islandProduction} banana(s) no dia ${gameState.day}; a tribo recebeu ${playerBananas}.`,
+  );
+
+  return gameState;
 }
 
 function spendFood(faction: Faction, needed: number): number {
