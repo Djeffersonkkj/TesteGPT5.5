@@ -68,7 +68,42 @@ export type ToolName =
   | "Armadilha de cipó"
   | "Catapulta improvisada";
 
-export type GamePhase = "report" | "planning" | "combat" | "gameOver";
+export type FactionId = string;
+
+export type DecisionKnownLevel = "confirmado" | "rumor" | "suspeita";
+
+export interface DecisionEffect {
+  type: string;
+  value?: number;
+  target?: string;
+  text?: string;
+  reportLevel?: DecisionKnownLevel;
+  status?: MonkeyStatus;
+  areaId?: AreaId;
+  factionId?: FactionId;
+  hidden?: boolean;
+}
+
+export interface DecisionOption {
+  id: string;
+  label: string;
+  description?: string;
+  effects: DecisionEffect[];
+}
+
+export interface PendingDecision {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  knownLevel: DecisionKnownLevel;
+  options: DecisionOption[];
+  sourceFaction?: FactionId;
+  targetMonkeyId?: string;
+  areaId?: AreaId;
+}
+
+export type GamePhase = "report" | "planning" | "resolution" | "decisions" | "combat" | "gameOver";
 
 export type PlannedAction =
   | {
@@ -215,6 +250,7 @@ export interface GameState {
   report: DailyReport;
   workingReport: DailyReport | null;
   groupPlans: GroupActionPlan[];
+  pendingDecisions: PendingDecision[];
   pendingCombat: PendingCombat | null;
   logs: string[];
   gameOver: GameOverInfo | null;

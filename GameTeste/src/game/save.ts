@@ -1,4 +1,5 @@
 import { createMapAreas, normalizeAreaId } from "./map";
+import { createReport } from "./reports";
 import type { Area, AreaId, GameState } from "./types";
 import { syncAreaMonkeyVisibility } from "./utils";
 
@@ -101,6 +102,10 @@ function normalizeSavedGame(state: GameState): GameState {
       ...state.pendingCombat,
       areaId: normalizeAreaId(state.pendingCombat.areaId),
     };
+  }
+  state.pendingDecisions = Array.isArray(state.pendingDecisions) ? state.pendingDecisions : [];
+  if (state.phase === "decisions" && !state.workingReport) {
+    state.workingReport = createReport(state.day);
   }
 
   syncAreaMonkeyVisibility(state);

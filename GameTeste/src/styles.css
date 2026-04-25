@@ -766,6 +766,96 @@ meter {
   font-size: 0.84rem;
 }
 
+.decision-modal {
+  width: min(760px, calc(100vw - 28px));
+}
+
+.decision-modal h1 {
+  font-size: 2rem;
+}
+
+.decision-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.certainty-pill {
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #efe0bd;
+  color: #3a2c19;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.certainty-pill.confirmado {
+  background: #dff1df;
+  color: #235235;
+}
+
+.certainty-pill.rumor {
+  background: #e4f0f2;
+  color: #1d5d66;
+}
+
+.certainty-pill.suspeita {
+  background: #ffe5d3;
+  color: #87351f;
+}
+
+.decision-description {
+  margin-bottom: 16px;
+  color: #3f3428;
+  line-height: 1.45;
+}
+
+.decision-options {
+  display: grid;
+  gap: 10px;
+}
+
+.decision-options button {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  min-height: 78px;
+  border: 1px solid #cdb78d;
+  border-radius: 8px;
+  background: #fff4df;
+  color: var(--ink);
+  padding: 12px;
+  text-align: left;
+}
+
+.decision-options button.selected {
+  border-color: var(--green);
+  background: #edf5df;
+  box-shadow: inset 0 0 0 2px rgba(45, 106, 79, 0.16);
+}
+
+.decision-options span,
+.decision-options small {
+  color: #5d5143;
+  font-size: 0.84rem;
+}
+
+.decision-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  border-top: 1px solid #eadbbf;
+  padding-top: 14px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .game-over-card {
   max-width: 760px;
 }
@@ -927,6 +1017,29 @@ body,
   width: 24px;
   height: 24px;
   object-fit: contain;
+}
+
+.phase-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  height: 38px;
+  border: 1px solid #c9b17d;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #f2e1bd;
+  color: #392814;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.phase-decisions,
+.phase-combat {
+  background: #ffe4cf;
+  color: #7d2a18;
 }
 
 .topbar-actions.compact {
@@ -1440,5 +1553,10 @@ body,
   .notification-grid,
   .modal-report-grid {
     grid-template-columns: 1fr;
+  }
+
+  .decision-footer {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

@@ -15,10 +15,11 @@ import MonkeyRoster from "./components/MonkeyRoster";
 import MoveToAreaPanel from "./components/MoveToAreaPanel";
 import NotificationModal from "./components/NotificationModal";
 import NotificationSummary from "./components/NotificationSummary";
+import PendingDecisionModal from "./components/PendingDecisionModal";
 import StartScreen from "./components/StartScreen";
 import TribeStatusBar from "./components/TribeStatusBar";
 import { clearMonkeyOrder, selectArea, setPersistentRole } from "./game/actions";
-import { acknowledgeReport, chooseCombatTactic, describeUnassignedMonkeys, endDay } from "./game/gameEngine";
+import { acknowledgeReport, applyDecisionOption, chooseCombatTactic, describeUnassignedMonkeys, endDay } from "./game/gameEngine";
 import { createInitialState } from "./game/initialState";
 import { clearSavedGame, hasSavedGame, loadGame, saveGame } from "./game/save";
 import type { GameState, Role, Species } from "./game/types";
@@ -213,7 +214,14 @@ export default function App() {
       modal={renderModalContent()}
       notifications={<NotificationSummary state={state} onOpen={() => setActiveModal("notifications")} />}
       overlay={
-        state.phase === "combat" && state.pendingCombat ? (
+        state.phase === "decisions" && state.pendingDecisions[0] ? (
+          <PendingDecisionModal
+            decision={state.pendingDecisions[0]}
+            remaining={state.pendingDecisions.length}
+            state={state}
+            onConfirm={(optionId) => persist(applyDecisionOption(state, state.pendingDecisions[0].id, optionId))}
+          />
+        ) : state.phase === "combat" && state.pendingCombat ? (
           <CombatModal
             state={state}
             onChoose={(tactic) => persist(chooseCombatTactic(state, tactic))}

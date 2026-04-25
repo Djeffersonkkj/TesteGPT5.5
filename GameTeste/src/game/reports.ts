@@ -13,6 +13,10 @@ export function createReport(day: number, title = `Relatório do Dia ${day}`): D
   };
 }
 
+export function generateDailyReport(day: number, title?: string): DailyReport {
+  return createReport(day, title);
+}
+
 export function ensureReportHasContent(report: DailyReport): DailyReport {
   if (report.confirmed.length === 0) {
     report.confirmed.push("Nenhum fato importante foi confirmado pelos vigias.");

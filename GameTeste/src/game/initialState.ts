@@ -232,6 +232,7 @@ export function createInitialState(options: StartOptions): GameState {
     report,
     workingReport: null,
     groupPlans: [],
+    pendingDecisions: [],
     pendingCombat: null,
     logs: ["A campanha começou no Vale das Frutas."],
     gameOver: null,

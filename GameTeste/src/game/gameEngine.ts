@@ -1,8 +1,8 @@
 import { resolveEnemyAI } from "./ai";
-import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SPECIES_PROFILES, TOOLS } from "./constants";
+import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, SHADOW_FACTION_ID, SPECIES_PROFILES, TOOLS } from "./constants";
 import { resolveCombatRound, type CombatOption } from "./combat";
 import { applyHungerAndRecovery, regenerateAreaFood, summarizeFactionRelations } from "./economy";
-import { resolveInternalEvents } from "./events";
+import { generatePendingDecisions } from "./events";
 import { normalizeAreaId } from "./map";
 import { createReport, ensureReportHasContent } from "./reports";
 import type {
@@ -14,6 +14,7 @@ import type {
   GroupActionPlan,
   GroupActionType,
   Monkey,
+  PendingDecision,
   Species,
   ToolName,
 } from "./types";
@@ -27,6 +28,7 @@ import {
   foodTotal,
   getArea,
   getFaction,
+  getMonkey,
   livingFactionMonkeys,
   playerMonkeys,
   pushLog,
@@ -565,10 +567,178 @@ function evaluateGameOver(state: GameState, report: DailyReport): GameOverInfo |
   return null;
 }
 
-function finalizeDay(state: GameState, report: DailyReport): GameState {
+function addDecisionReportLine(report: DailyReport, level: string | undefined, text: string): void {
+  if (level === "confirmado") {
+    report.confirmed.push(text);
+  } else if (level === "rumor") {
+    report.rumors.push(text);
+  } else {
+    report.suspicions.push(text);
+  }
+}
+
+function describeDecisionEffect(effect: PendingDecision["options"][number]["effects"][number], state: GameState): string | null {
+  if (effect.hidden) {
+    return null;
+  }
+  const amount = effect.value ?? 0;
+  if (effect.type === "food") {
+    return `${amount > 0 ? "+" : ""}${amount} comida`;
+  }
+  if (effect.type === "morale") {
+    return `${amount > 0 ? "+" : ""}${amount} moral da tribo`;
+  }
+  if (effect.type === "relation" && effect.factionId) {
+    const faction = state.factions.find((item) => item.id === effect.factionId);
+    return `${amount > 0 ? "+" : ""}${amount} relacao com ${faction?.name ?? "faccao"}`;
+  }
+  if (effect.type === "loyalty" && effect.target) {
+    const monkey = state.monkeys.find((item) => item.id === effect.target);
+    return `${amount > 0 ? "+" : ""}${amount} lealdade${monkey ? ` de ${monkey.name}` : ""}`;
+  }
+  if (effect.type === "monkeyMorale" && effect.target) {
+    const monkey = state.monkeys.find((item) => item.id === effect.target);
+    return `${amount > 0 ? "+" : ""}${amount} moral${monkey ? ` de ${monkey.name}` : ""}`;
+  }
+  if (effect.type === "hurtMonkey" || effect.type === "hurtRandomPlayer") {
+    return "risco de ferimento";
+  }
+  if (effect.type === "exileMonkey") {
+    return "um macaco deixa a tribo";
+  }
+  if (effect.type === "setRole") {
+    return "descanso planejado";
+  }
+  return null;
+}
+
+export function describeDecisionOptionEffects(option: PendingDecision["options"][number], state: GameState): string[] {
+  return option.effects
+    .map((effect) => describeDecisionEffect(effect, state))
+    .filter((line): line is string => Boolean(line));
+}
+
+function applyDecisionEffect(
+  state: GameState,
+  report: DailyReport,
+  decision: PendingDecision,
+  effect: PendingDecision["options"][number]["effects"][number],
+): void {
+  const player = getFaction(state, state.playerFactionId);
+  const value = effect.value ?? 0;
+
+  if (effect.type === "food") {
+    player.food.bananas = Math.max(0, player.food.bananas + value);
+    return;
+  }
+
+  if (effect.type === "morale") {
+    player.morale = clamp(player.morale + value, 0, 100);
+    livingFactionMonkeys(state, state.playerFactionId).forEach((monkey) => {
+      monkey.morale = clamp(monkey.morale + value, 0, 100);
+      updateMonkeyStatus(monkey);
+    });
+    return;
+  }
+
+  if (effect.type === "loyalty" && effect.target) {
+    const monkey = state.monkeys.find((item) => item.id === effect.target);
+    if (monkey) {
+      monkey.loyalty = clamp(monkey.loyalty + value, 0, 100);
+    }
+    return;
+  }
+
+  if (effect.type === "monkeyMorale" && effect.target) {
+    const monkey = state.monkeys.find((item) => item.id === effect.target);
+    if (monkey) {
+      monkey.morale = clamp(monkey.morale + value, 0, 100);
+      updateMonkeyStatus(monkey);
+    }
+    return;
+  }
+
+  if (effect.type === "relation" && effect.factionId) {
+    changeRelation(state, state.playerFactionId, effect.factionId, value);
+    return;
+  }
+
+  if (effect.type === "hurtMonkey" && effect.target) {
+    const monkey = state.monkeys.find((item) => item.id === effect.target);
+    if (monkey) {
+      monkey.hp = clamp(monkey.hp - Math.max(1, value), 0, monkey.maxHp);
+      updateMonkeyStatus(monkey);
+    }
+    return;
+  }
+
+  if (effect.type === "hurtRandomPlayer") {
+    const candidates = livingFactionMonkeys(state, state.playerFactionId).filter((monkey) => !monkey.isLeader);
+    if (candidates.length > 0) {
+      const monkey = sample(candidates);
+      monkey.hp = clamp(monkey.hp - Math.max(1, value), 0, monkey.maxHp);
+      updateMonkeyStatus(monkey);
+      report.casualtySummary.push(`${monkey.name} voltou ferido depois da decisao sobre ${decision.title}.`);
+    }
+    return;
+  }
+
+  if (effect.type === "exileMonkey" && effect.target) {
+    const monkey = state.monkeys.find((item) => item.id === effect.target);
+    if (monkey) {
+      monkey.factionId = effect.factionId ?? SHADOW_FACTION_ID;
+      monkey.locationId = "bosque";
+      monkey.role = null;
+      monkey.persistentRole = null;
+      monkey.plannedAction = null;
+      player.deserters += 1;
+    }
+    return;
+  }
+
+  if (effect.type === "setRole" && effect.target) {
+    const monkey = state.monkeys.find((item) => item.id === effect.target);
+    if (monkey) {
+      monkey.role = "Descansando";
+      monkey.persistentRole = "Descansando";
+      monkey.plannedAction = { kind: "role", role: "Descansando" };
+    }
+    return;
+  }
+
+  if (effect.type === "addStatus" && effect.target && effect.status) {
+    getMonkey(state, effect.target).status = effect.status;
+    return;
+  }
+
+  if (effect.type === "removeStatus" && effect.target) {
+    const monkey = getMonkey(state, effect.target);
+    monkey.status = "normal";
+    updateMonkeyStatus(monkey);
+    return;
+  }
+
+  if (effect.type === "addReport" && effect.text) {
+    addDecisionReportLine(report, effect.reportLevel, effect.text);
+  }
+}
+
+function continueAfterResolution(state: GameState, report: DailyReport): GameState {
   resolveEnemyAI(state, report);
+  const decisions = generatePendingDecisions(state, report);
+  if (decisions.length > 0) {
+    state.pendingDecisions = decisions;
+    state.workingReport = report;
+    state.phase = "decisions";
+    pushLog(state, `${decisions.length} decisao(oes) pendente(s) antes do amanhecer.`);
+    return state;
+  }
+
+  return finalizeDay(state, report);
+}
+
+export function finalizeDay(state: GameState, report: DailyReport): GameState {
   applyHungerAndRecovery(state, report);
-  resolveInternalEvents(state, report);
   summarizeFactionRelations(state, report);
 
   state.factions.forEach((faction) => {
@@ -582,6 +752,7 @@ function finalizeDay(state: GameState, report: DailyReport): GameState {
   state.report = ensureReportHasContent(report);
   state.workingReport = null;
   state.pendingCombat = null;
+  state.pendingDecisions = [];
 
   if (gameOver) {
     state.gameOver = gameOver;
@@ -605,17 +776,25 @@ export function endDay(state: GameState): GameState {
 
   const report = createReport(next.day);
   regenerateAreaFood(next);
+  if (resolvePlayerActions(next, report)) {
+    return next;
+  }
+
+  return continueAfterResolution(next, report);
+}
+
+export function resolvePlayerActions(state: GameState, report: DailyReport): boolean {
   const planMembersAreInArea = (plan: GroupActionPlan) =>
     plan.monkeyIds.every((id) => {
-      const monkey = next.monkeys.find((item) => item.id === id);
+      const monkey = state.monkeys.find((item) => item.id === id);
       return monkey && normalizeAreaId(monkey.locationId) === plan.areaId;
     });
-  const blockedPlans = next.groupPlans.filter((plan) => !planMembersAreInArea(plan));
+  const blockedPlans = state.groupPlans.filter((plan) => !planMembersAreInArea(plan));
   if (blockedPlans.length > 0) {
     const blockedPlanIds = new Set(blockedPlans.map((plan) => plan.id));
     report.suspicions.push("Algumas acoes foram canceladas: os macacos precisam estar no cenario da acao.");
-    next.groupPlans = next.groupPlans.filter(planMembersAreInArea);
-    next.monkeys.forEach((monkey) => {
+    state.groupPlans = state.groupPlans.filter(planMembersAreInArea);
+    state.monkeys.forEach((monkey) => {
       if (monkey.plannedAction?.kind !== "group" || !blockedPlanIds.has(monkey.plannedAction.groupActionId)) {
         return;
       }
@@ -624,23 +803,23 @@ export function endDay(state: GameState): GameState {
     });
   }
 
-  next.groupPlans
+  state.groupPlans
     .filter((plan) => plan.actionType !== "attack")
     .forEach((plan) => {
-      resolveNonCombatGroupPlan(next, plan, report);
+      resolveNonCombatGroupPlan(state, plan, report);
     });
 
-  processRoleAssignments(next, report);
+  processRoleAssignments(state, report);
 
-  const attackPlan = next.groupPlans.find((plan) => plan.actionType === "attack");
-  if (attackPlan && createCombatFromPlan(next, attackPlan, report)) {
-    next.phase = "combat";
-    next.workingReport = report;
-    pushLog(next, `Combate iniciado em ${getArea(next, attackPlan.areaId).name}.`);
-    return next;
+  const attackPlan = state.groupPlans.find((plan) => plan.actionType === "attack");
+  if (attackPlan && createCombatFromPlan(state, attackPlan, report)) {
+    state.phase = "combat";
+    state.workingReport = report;
+    pushLog(state, `Combate iniciado em ${getArea(state, attackPlan.areaId).name}.`);
+    return true;
   }
 
-  return finalizeDay(next, report);
+  return false;
 }
 
 export function chooseCombatTactic(
@@ -657,7 +836,40 @@ export function chooseCombatTactic(
     return result.state;
   }
 
-  return finalizeDay(result.state, result.state.workingReport ?? createReport(result.state.day));
+  return continueAfterResolution(result.state, result.state.workingReport ?? createReport(result.state.day));
+}
+
+export function applyDecisionOption(
+  state: GameState,
+  decisionId: string,
+  optionId: string,
+): GameState {
+  const next = cloneState(state);
+  if (next.phase !== "decisions" || next.pendingDecisions.length === 0) {
+    return next;
+  }
+
+  const decision = next.pendingDecisions.find((item) => item.id === decisionId);
+  const option = decision?.options.find((item) => item.id === optionId);
+  if (!decision || !option) {
+    return next;
+  }
+
+  const report = next.workingReport ?? createReport(next.day);
+  option.effects.forEach((effect) => {
+    applyDecisionEffect(next, report, decision, effect);
+  });
+  pushLog(next, `${decision.title}: ${option.label}.`);
+
+  next.pendingDecisions = next.pendingDecisions.filter((item) => item.id !== decision.id);
+  next.workingReport = report;
+
+  if (next.pendingDecisions.length > 0) {
+    next.phase = "decisions";
+    return next;
+  }
+
+  return finalizeDay(next, report);
 }
 
 export function describeUnassignedMonkeys(state: GameState): string[] {
