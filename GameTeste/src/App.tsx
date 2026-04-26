@@ -19,7 +19,7 @@ import PendingDecisionModal from "./components/PendingDecisionModal";
 import StartScreen from "./components/StartScreen";
 import TribeStatusBar from "./components/TribeStatusBar";
 import { clearMonkeyOrder, selectArea, setPersistentRole } from "./game/actions";
-import { acknowledgeReport, applyDecisionOption, chooseCombatAction, confirmCombatSummary, describeUnassignedMonkeys, endDay } from "./game/gameEngine";
+import { acknowledgeReport, applyDecisionOption, chooseCombatAction, confirmCombatSummary, continueCombatRound, describeUnassignedMonkeys, endDay } from "./game/gameEngine";
 import { createInitialState } from "./game/initialState";
 import { clearSavedGame, hasSavedGame, loadGame, saveGame } from "./game/save";
 import type { GameState, Role, Species } from "./game/types";
@@ -225,6 +225,7 @@ export default function App() {
           <CombatModal
             state={state}
             onAction={(request) => persist(chooseCombatAction(state, request))}
+            onContinueRound={() => persist(continueCombatRound(state))}
             onConfirmSummary={() => persist(confirmCombatSummary(state))}
           />
         ) : null

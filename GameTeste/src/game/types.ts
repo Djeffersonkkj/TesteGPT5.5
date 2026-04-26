@@ -288,7 +288,9 @@ export interface PendingCombat {
   playerSide: "attacker" | "defender";
   round: number;
   maxRounds: number;
-  phase?: "playerTurn" | "enemyTurn" | "summary";
+  config?: CombatConfig;
+  combatType?: CombatType;
+  phase?: "playerTurn" | "enemyTurn" | "roundSummary" | "summary";
   playerMonkeyIds: string[];
   enemyMonkeyIds: string[];
   actedMonkeyIds?: string[];
@@ -297,9 +299,21 @@ export interface PendingCombat {
   exposedMonkeyIds?: string[];
   enemyMorale?: number;
   lastEffects?: CombatEffect[];
+  lastRoundSummary?: string;
+  currentPlayerChoice?: CombatActionId | null;
+  initialPlayerForce?: number;
+  initialEnemyForce?: number;
   result?: CombatResult;
   log: string[];
 }
+
+export type CombatType = "common" | "importantArea" | "leader" | "ambush";
+
+export type CombatConfig = {
+  maxRounds: number;
+  decisiveCombatExtraRound?: boolean;
+  autoRetreatWhenLosingBadly?: boolean;
+};
 
 export type CombatActionId =
   | "attack"

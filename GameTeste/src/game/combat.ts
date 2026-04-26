@@ -10,10 +10,12 @@ import {
 } from "./skills";
 import type {
   CombatActionId,
+  CombatConfig,
   CombatChoice,
   CombatEffect,
   CombatRoundResult,
   CombatResult,
+  CombatType,
   CombatUnit,
   DailyReport,
   GameState,
@@ -60,6 +62,53 @@ export const COMBAT_ACTIONS: CombatActionDefinition[] = [
   { id: "saveEnergy", label: "Poupar energia", text: "Recupera energia e ganha pequena defesa." },
 ];
 
+export function effectiveCombatForce(monkeys: Monkey[]): number {
+  return livingMonkeys(monkeys).reduce(
+    (sum, monkey) =>
+      sum +
+      monkey.attack +
+      monkey.defense +
+      (monkey.energy / Math.max(1, monkey.maxEnergy)) * 10 +
+      monkey.morale / 10,
+    0,
+  );
+}
+
+export function getCombatMaxRounds(params: {
+  attackers: Monkey[];
+  defenders: Monkey[];
+  area: MapArea;
+  isLeaderInvolved: boolean;
+  isImportantArea: boolean;
+  combatType: CombatType;
+}): number {
+  const totalCombatants = params.attackers.length + params.defenders.length;
+  const smallAmbush = params.combatType === "ambush" && totalCombatants <= 6;
+
+  if (smallAmbush && !params.isLeaderInvolved && !params.isImportantArea) {
+    return 3;
+  }
+  if (params.isLeaderInvolved) {
+    return 6;
+  }
+  if (params.isImportantArea || params.area.currentBananaProduction >= 30) {
+    return 5;
+  }
+  if (params.combatType === "ambush") {
+    return 3;
+  }
+  return 4;
+}
+
+export function buildCombatConfig(params: Parameters<typeof getCombatMaxRounds>[0]): CombatConfig {
+  const maxRounds = Math.min(6, Math.max(1, getCombatMaxRounds(params)));
+  return {
+    maxRounds,
+    decisiveCombatExtraRound: maxRounds >= 6,
+    autoRetreatWhenLosingBadly: true,
+  };
+}
+
 function ensureCombatDefaults(combat: PendingCombat): void {
   combat.phase ??= "playerTurn";
   combat.actedMonkeyIds ??= [];
@@ -68,6 +117,13 @@ function ensureCombatDefaults(combat: PendingCombat): void {
   combat.exposedMonkeyIds ??= [];
   combat.enemyMorale ??= 60;
   combat.lastEffects ??= [];
+  combat.currentPlayerChoice ??= null;
+  combat.maxRounds = Math.min(6, Math.max(1, combat.config?.maxRounds ?? combat.maxRounds ?? 4));
+  combat.config ??= {
+    maxRounds: combat.maxRounds,
+    autoRetreatWhenLosingBadly: true,
+    decisiveCombatExtraRound: combat.maxRounds >= 6,
+  };
 }
 
 function combatMonkeys(state: GameState, ids: string[]): Monkey[] {
@@ -88,6 +144,11 @@ function alivePlayerMonkeys(state: GameState, combat: PendingCombat): Monkey[] {
 
 function aliveEnemyMonkeys(state: GameState, combat: PendingCombat): Monkey[] {
   return activeMonkeys(state, combat.enemyMonkeyIds);
+}
+
+function ensureCombatForces(state: GameState, combat: PendingCombat): void {
+  combat.initialPlayerForce ??= Math.max(1, effectiveCombatForce(combatMonkeys(state, combat.playerMonkeyIds)));
+  combat.initialEnemyForce ??= Math.max(1, effectiveCombatForce(combatMonkeys(state, combat.enemyMonkeyIds)));
 }
 
 function actionIdToChoice(action: CombatActionId): CombatChoice {
@@ -599,6 +660,8 @@ export function resolveCombatRound(params: {
   defenderChoice: CombatChoice;
   area: MapArea;
   gameState: GameState;
+  combatType?: CombatType;
+  config?: CombatConfig;
 }): CombatRoundResult {
   const { attackers, defenders, attackerChoice, defenderChoice, area, gameState } = params;
   const attackerFactionId = attackers[0]?.factionId;
@@ -616,8 +679,25 @@ export function resolveCombatRound(params: {
   let fledFactionId: string | undefined;
   let surrenderedFactionId: string | undefined;
   let rounds = 0;
+  const maxRounds = Math.min(
+    6,
+    Math.max(
+      1,
+      params.config?.maxRounds ??
+        getCombatMaxRounds({
+          attackers,
+          defenders,
+          area,
+          isLeaderInvolved: [...attackers, ...defenders].some((monkey) => monkey.isLeader),
+          isImportantArea: Boolean(area.isStartingBase || area.currentBananaProduction >= 30),
+          combatType: params.combatType ?? "common",
+        }),
+    ),
+  );
+  const initialAttackerForce = Math.max(1, effectiveCombatForce(attackers));
+  const initialDefenderForce = Math.max(1, effectiveCombatForce(defenders));
 
-  for (rounds = 1; rounds <= 3; rounds += 1) {
+  for (rounds = 1; rounds <= maxRounds; rounds += 1) {
     const livingAttackers = livingMonkeys(attackers);
     const livingDefenders = livingMonkeys(defenders);
     if (livingAttackers.length === 0 || livingDefenders.length === 0) {
@@ -702,6 +782,31 @@ export function resolveCombatRound(params: {
     attackerMoraleDelta += applyTeamMorale(livingAttackers, attackerChoice === "SAVE_ENERGY" || attackerChoice === "DEFEND" ? 1 : -1);
     defenderMoraleDelta += applyTeamMorale(livingDefenders, defenderChoice === "SAVE_ENERGY" || defenderChoice === "DEFEND" ? 1 : -1);
 
+    const attackerForce = effectiveCombatForce(livingMonkeys(attackers));
+    const defenderForce = effectiveCombatForce(livingMonkeys(defenders));
+    if (attackerForce < initialAttackerForce * 0.6) {
+      const morale = averageMorale(livingAttackers);
+      const failChance = clamp((52 - morale) / 80 + (defenderForce - attackerForce) / initialAttackerForce, 0.12, 0.78);
+      if (Math.random() < failChance) {
+        outcome = "attackersFled";
+        fledFactionId = attackerFactionId;
+        log.push(`${attackerFaction?.name ?? "Atacantes"} falharam no teste de moral apos perdas pesadas.`);
+        break;
+      }
+    }
+    if (defenderForce < initialDefenderForce * 0.6) {
+      const morale = averageMorale(livingDefenders);
+      const failChance = clamp((52 - morale) / 80 + (attackerForce - defenderForce) / initialDefenderForce, 0.12, 0.78);
+      if (Math.random() < failChance) {
+        const surrender = morale < 22 && defenderForce < attackerForce * 0.55;
+        outcome = surrender ? "surrender" : "defendersFled";
+        surrenderedFactionId = surrender ? defenderFactionId : undefined;
+        fledFactionId = surrender ? undefined : defenderFactionId;
+        log.push(`${defenderFaction?.name ?? "Defensores"} quebraram apos perder mais de 40% da forca efetiva.`);
+        break;
+      }
+    }
+
     if (livingMonkeys(defenders).length === 0) {
       outcome = "attackersWin";
       break;
@@ -713,8 +818,8 @@ export function resolveCombatRound(params: {
   }
 
   if (outcome === "draw") {
-    const attackerPower = combatPowerWithConditions(attackers, attackerChoice, 3);
-    const defenderPower = combatPowerWithConditions(defenders, defenderChoice, 3);
+    const attackerPower = combatPowerWithConditions(attackers, attackerChoice, maxRounds);
+    const defenderPower = combatPowerWithConditions(defenders, defenderChoice, maxRounds);
     if (attackerPower > defenderPower * 1.15) {
       outcome = "attackersWin";
     } else if (defenderPower > attackerPower * 1.15) {
@@ -740,7 +845,7 @@ export function resolveCombatRound(params: {
   }
 
   return {
-    rounds: Math.min(rounds, 3),
+    rounds: Math.min(rounds, maxRounds),
     outcome,
     damageCaused,
     damageReceived,
@@ -858,6 +963,62 @@ function finishAsSummary(
   pushCombatLog(combat, reason);
 }
 
+function averageMorale(monkeys: Monkey[]): number {
+  return average(livingMonkeys(monkeys).map((monkey) => monkey.morale));
+}
+
+function maybeAutoRetreatAfterHeavyLoss(state: GameState, combat: PendingCombat): boolean {
+  if (combat.config?.autoRetreatWhenLosingBadly === false) {
+    return false;
+  }
+  ensureCombatForces(state, combat);
+
+  const players = alivePlayerMonkeys(state, combat);
+  const enemies = aliveEnemyMonkeys(state, combat);
+  if (players.length === 0 || enemies.length === 0) {
+    return false;
+  }
+
+  const playerForce = effectiveCombatForce(players);
+  const enemyForce = effectiveCombatForce(enemies);
+  const playerLostBadly = playerForce < (combat.initialPlayerForce ?? playerForce) * 0.6;
+  const enemyLostBadly = enemyForce < (combat.initialEnemyForce ?? enemyForce) * 0.6;
+
+  if (playerLostBadly) {
+    const morale = averageMorale(players);
+    const failChance = clamp((52 - morale) / 80 + (enemyForce - playerForce) / Math.max(20, combat.initialPlayerForce ?? 20), 0.12, 0.78);
+    if (Math.random() < failChance) {
+      const reason =
+        morale < 20 && playerForce < enemyForce * 0.45
+          ? "A tribo perdeu mais de 40% da forca efetiva e se rendeu antes da destruicao total."
+          : "A tribo perdeu mais de 40% da forca efetiva, falhou no teste de moral e recuou.";
+      finishAsSummary(state, combat, morale < 20 && playerForce < enemyForce * 0.45 ? "defeat" : "flee", reason);
+      return true;
+    }
+    pushCombatLog(combat, "A tribo sofreu perdas pesadas, mas manteve a linha no teste de moral.");
+  }
+
+  if (enemyLostBadly) {
+    const morale = Math.min(averageMorale(enemies), combat.enemyMorale ?? 60);
+    const failChance = clamp((55 - morale) / 75 + (playerForce - enemyForce) / Math.max(20, combat.initialEnemyForce ?? 20), 0.15, 0.82);
+    if (Math.random() < failChance) {
+      const surrender = morale < 22 && enemyForce < playerForce * 0.55;
+      finishAsSummary(
+        state,
+        combat,
+        surrender ? "surrender" : "enemyFled",
+        surrender
+          ? "Os rivais perderam mais de 40% da forca efetiva e aceitaram rendicao."
+          : "Os rivais perderam mais de 40% da forca efetiva, falharam na moral e recuaram.",
+      );
+      return true;
+    }
+    pushCombatLog(combat, "Os rivais sofreram perdas pesadas, mas ainda nao quebraram.");
+  }
+
+  return false;
+}
+
 function finishIfSideDown(state: GameState, combat: PendingCombat): boolean {
   const players = alivePlayerMonkeys(state, combat);
   const enemies = aliveEnemyMonkeys(state, combat);
@@ -869,6 +1030,21 @@ function finishIfSideDown(state: GameState, combat: PendingCombat): boolean {
     finishAsSummary(state, combat, "victory", "Todos os rivais cairam.");
     return true;
   }
+  const playerLeader = combatMonkeys(state, combat.playerMonkeyIds).find((monkey) => monkey.isLeader);
+  if (playerLeader && (playerLeader.status === "morto" || playerLeader.hp <= 0)) {
+    finishAsSummary(state, combat, "defeat", "O lider caiu e a tribo entrou em colapso imediato.");
+    return true;
+  }
+  const enemyLeader = combatMonkeys(state, combat.enemyMonkeyIds).find((monkey) => monkey.isLeader);
+  if (
+    enemyLeader &&
+    (enemyLeader.status === "morto" || enemyLeader.hp <= 0) &&
+    (combat.enemyMorale ?? 60) < 35 &&
+    Math.random() < 0.65
+  ) {
+    finishAsSummary(state, combat, "enemyFled", "O lider rival caiu e a linha inimiga se desfez.");
+    return true;
+  }
   return false;
 }
 
@@ -878,11 +1054,11 @@ function finishByRoundLimit(state: GameState, combat: PendingCombat): void {
   const playerPower = combatPowerWithConditions(players, "DIRECT_ATTACK", combat.round);
   const enemyPower = combatPowerWithConditions(enemies, "DIRECT_ATTACK", combat.round);
   if (playerPower > enemyPower * 1.15) {
-    finishAsSummary(state, combat, "victory", "A terceira rodada terminou com vantagem clara para a tribo.");
+    finishAsSummary(state, combat, "victory", `A rodada ${combat.round} terminou com vantagem clara para a tribo.`);
   } else if (enemyPower > playerPower * 1.15) {
-    finishAsSummary(state, combat, "defeat", "A terceira rodada terminou com os rivais dominando o campo.");
+    finishAsSummary(state, combat, "defeat", `A rodada ${combat.round} terminou com os rivais dominando o campo.`);
   } else {
-    finishAsSummary(state, combat, "draw", "Depois de tres rodadas, nenhum lado conseguiu romper a linha rival.");
+    finishAsSummary(state, combat, "draw", `Depois de ${combat.round} rodada(s), nenhum lado conseguiu romper a linha rival.`);
   }
 }
 
@@ -1162,6 +1338,7 @@ function runEnemyTurn(state: GameState, combat: PendingCombat): void {
   combat.phase = "enemyTurn";
   const playerIds = new Set(combat.playerMonkeyIds);
   const effects: CombatEffect[] = [];
+  const logStart = combat.log.length;
 
   if ((combat.enemyMorale ?? 60) < 18) {
     const enemyFactionId = combat.playerSide === "attacker" ? combat.defenderFactionId : combat.attackerFactionId;
@@ -1195,25 +1372,56 @@ function runEnemyTurn(state: GameState, combat: PendingCombat): void {
   if (finishIfSideDown(state, combat)) {
     return;
   }
+  if (maybeAutoRetreatAfterHeavyLoss(state, combat)) {
+    return;
+  }
 
   combat.defendingMonkeyIds = (combat.defendingMonkeyIds ?? []).filter((id) => !playerIds.has(id));
   combat.exposedMonkeyIds = (combat.exposedMonkeyIds ?? []).filter((id) => !playerIds.has(id));
   combat.protectedMonkeyIds = [];
+  combat.currentPlayerChoice = null;
+  combat.lastRoundSummary =
+    combat.log.slice(logStart).filter(Boolean).slice(-3).join(" ") ||
+    `Rodada ${combat.round}: os grupos testaram a linha sem baixa decisiva.`;
 
   if (combat.round >= combat.maxRounds) {
     finishByRoundLimit(state, combat);
     return;
   }
 
-  combat.round += 1;
-  combat.actedMonkeyIds = [];
-  combat.phase = "playerTurn";
-  pushCombatLog(combat, `Rodada ${combat.round}: sua tribo age novamente.`);
+  combat.phase = "roundSummary";
+  pushCombatLog(combat, `Rodada ${combat.round} encerrada. Prepare a proxima ordem.`);
 }
 
 function allPlayersActed(state: GameState, combat: PendingCombat): boolean {
   const acted = new Set(combat.actedMonkeyIds ?? []);
   return alivePlayerMonkeys(state, combat).every((monkey) => acted.has(monkey.id));
+}
+
+export function advanceCombatRound(state: GameState): GameState {
+  const combat = state.pendingCombat;
+  if (!combat || combat.result) {
+    return state;
+  }
+  ensureCombatDefaults(combat);
+  if (combat.phase !== "roundSummary") {
+    return state;
+  }
+  if (combat.round >= combat.maxRounds) {
+    finishByRoundLimit(state, combat);
+    return state;
+  }
+
+  combat.round += 1;
+  combat.actedMonkeyIds = [];
+  combat.defendingMonkeyIds = [];
+  combat.protectedMonkeyIds = [];
+  combat.exposedMonkeyIds = [];
+  combat.lastEffects = [];
+  combat.currentPlayerChoice = null;
+  combat.phase = "playerTurn";
+  pushCombatLog(combat, `Rodada ${combat.round}: escolha as proximas acoes.`);
+  return state;
 }
 
 export function performPlayerCombatAction(state: GameState, request: CombatActionRequest): GameState {
@@ -1222,6 +1430,7 @@ export function performPlayerCombatAction(state: GameState, request: CombatActio
     return state;
   }
   ensureCombatDefaults(combat);
+  ensureCombatForces(state, combat);
   if (combat.phase !== "playerTurn") {
     return state;
   }
@@ -1233,6 +1442,7 @@ export function performPlayerCombatAction(state: GameState, request: CombatActio
 
   setEffects(combat, []);
   const choice = actionIdToChoice(request.action);
+  combat.currentPlayerChoice = request.action;
   if (choice !== "FLEE" && choice !== "NEGOTIATE_SURRENDER" && choice !== "SAVE_ENERGY" && maybeMoraleFailure(combat, actor)) {
     markActed(combat, actor.id);
     if (allPlayersActed(state, combat)) {
@@ -1244,7 +1454,13 @@ export function performPlayerCombatAction(state: GameState, request: CombatActio
   if (request.action === "attack") {
     applyAttack(state, combat, actor, request.targetId);
   } else if (request.action === "ambush") {
-    applyAmbush(state, combat, actor, request.targetId);
+    const area = getArea(state, combat.areaId);
+    if (combat.round > 2 && actor.stealth < 7 && area.stealthModifier <= 0) {
+      pushCombatLog(combat, "A emboscada ja nao fazia sentido nesta posicao aberta.");
+      setEffects(combat, [{ unitId: actor.id, kind: "miss", text: "sem brecha" }]);
+    } else {
+      applyAmbush(state, combat, actor, request.targetId);
+    }
   } else if (request.action === "focusLeader") {
     applyFocusLeader(state, combat, actor);
   } else if (request.action === "defend") {
@@ -1317,6 +1533,9 @@ export function performPlayerCombatAction(state: GameState, request: CombatActio
   updateMonkeyStatus(actor);
 
   if (finishIfSideDown(state, combat)) {
+    return state;
+  }
+  if (maybeAutoRetreatAfterHeavyLoss(state, combat)) {
     return state;
   }
 

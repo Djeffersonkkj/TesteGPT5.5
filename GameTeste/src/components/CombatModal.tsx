@@ -5,6 +5,7 @@ import type { CombatActionId, CombatEffect, CombatUnit, GameState } from "../gam
 interface Props {
   state: GameState;
   onAction: (request: CombatActionRequest) => void;
+  onContinueRound: () => void;
   onConfirmSummary: () => void;
 }
 
@@ -106,14 +107,18 @@ function CombatGrid({
 function CombatActionPanel({
   selectedUnit,
   selectedAction,
+  currentChoiceLabel,
   targetHint,
   canAct,
+  isActionDisabled,
   onChooseAction,
 }: {
   selectedUnit?: CombatUnit;
   selectedAction: CombatActionId | null;
+  currentChoiceLabel: string;
   targetHint: string;
   canAct: boolean;
+  isActionDisabled: (action: CombatActionId) => boolean;
   onChooseAction: (action: CombatActionId) => void;
 }) {
   return (
@@ -128,6 +133,11 @@ function CombatActionPanel({
         )}
       </div>
 
+      <div className="combat-selection-card">
+        <span className="eyebrow">escolha atual</span>
+        <strong>{currentChoiceLabel}</strong>
+      </div>
+
       {targetHint && <p className="combat-target-hint">{targetHint}</p>}
 
       <div className="combat-action-list">
@@ -135,7 +145,7 @@ function CombatActionPanel({
           <button
             key={action.id}
             className={selectedAction === action.id ? "selected" : ""}
-            disabled={!canAct}
+            disabled={!canAct || isActionDisabled(action.id)}
             type="button"
             onClick={() => onChooseAction(action.id)}
           >
@@ -145,6 +155,20 @@ function CombatActionPanel({
         ))}
       </div>
     </aside>
+  );
+}
+
+function GroupState({ title, units }: { title: string; units: CombatUnit[] }) {
+  const avgHp =
+    units.length > 0
+      ? Math.round(units.reduce((sum, unit) => sum + unit.hp / Math.max(1, unit.maxHp), 0) / units.length * 100)
+      : 0;
+  const tired = units.filter((unit) => unit.energy < 25).length;
+
+  return (
+    <span>
+      {title}: {units.length} aptos - HP {avgHp}%{tired > 0 ? ` - ${tired} cansado(s)` : ""}
+    </span>
   );
 }
 
@@ -186,7 +210,7 @@ function CombatSummary({
   );
 }
 
-export default function CombatModal({ state, onAction, onConfirmSummary }: Props) {
+export default function CombatModal({ state, onAction, onContinueRound, onConfirmSummary }: Props) {
   const combat = state.pendingCombat!;
   const units = useMemo(() => buildCombatUnits(state), [state]);
   const playerUnits = units.filter((unit) => unit.team === "player" && unit.hp > 0);
@@ -210,6 +234,7 @@ export default function CombatModal({ state, onAction, onConfirmSummary }: Props
   const enemyFaction = state.factions.find((item) => item.id === enemyFactionId)!;
   const selectedUnit = units.find((unit) => unit.id === selectedUnitId);
   const actionDefinition = COMBAT_ACTIONS.find((action) => action.id === selectedAction);
+  const currentChoiceDefinition = COMBAT_ACTIONS.find((action) => action.id === combat.currentPlayerChoice);
   const targetTeam = actionDefinition?.needsTarget === "enemy" ? "enemy" : actionDefinition?.needsTarget === "ally" ? "player" : null;
   const canAct = combat.phase === "playerTurn" && Boolean(selectedUnit && selectedUnit.team === "player" && !selectedUnit.hasActed && selectedUnit.hp > 0);
   const targetHint =
@@ -220,6 +245,12 @@ export default function CombatModal({ state, onAction, onConfirmSummary }: Props
       : selectedAction === "protect"
         ? "Escolha um aliado para proteger."
         : "";
+  const isActionDisabled = (action: CombatActionId) => {
+    if (action !== "ambush" || !selectedUnit) {
+      return false;
+    }
+    return combat.round > 2 && selectedUnit.stealth < 7 && area.stealthModifier <= 0;
+  };
 
   const chooseAction = (action: CombatActionId) => {
     if (!selectedUnitId) {
@@ -250,18 +281,30 @@ export default function CombatModal({ state, onAction, onConfirmSummary }: Props
             <p className="eyebrow">combate tatico</p>
             <h1>{area.name}</h1>
             <p className="combat-subtitle">
-              Rodada {combat.round}/{combat.maxRounds} contra {enemyFaction.name} - {combat.phase === "summary" ? "resumo" : combat.phase === "enemyTurn" ? "turno inimigo" : "seu turno"}
+              Rodada {combat.round}/{combat.maxRounds} contra {enemyFaction.name} - {combat.phase === "summary" ? "resumo" : combat.phase === "roundSummary" ? "fim da rodada" : combat.phase === "enemyTurn" ? "turno inimigo" : "seu turno"}
             </p>
           </div>
           <div className="combat-score-strip">
-            <span>Aliados: {playerUnits.length}</span>
-            <span>Rivais: {enemyUnits.length}</span>
+            <GroupState title="Aliados" units={playerUnits} />
+            <GroupState title="Rivais" units={enemyUnits} />
             <span>Moral inimiga: {combat.enemyMorale ?? 60}</span>
           </div>
         </header>
 
         {combat.phase === "summary" ? (
           <CombatSummary state={state} onConfirm={onConfirmSummary} />
+        ) : combat.phase === "roundSummary" ? (
+          <div className="combat-summary-panel">
+            <p className="eyebrow">resultado da rodada</p>
+            <h2>Rodada {combat.round} encerrada</h2>
+            <div className="combat-summary-lines">
+              <span>{combat.lastRoundSummary ?? "Os grupos se reposicionaram sem decisao final."}</span>
+              <span>Proxima rodada: {Math.min(combat.round + 1, combat.maxRounds)}/{combat.maxRounds}</span>
+            </div>
+            <button className="primary-button full-button" type="button" onClick={onContinueRound}>
+              Continuar para a proxima rodada
+            </button>
+          </div>
         ) : (
           <div className="combat-tactical-layout">
             <CombatGrid
@@ -280,6 +323,8 @@ export default function CombatModal({ state, onAction, onConfirmSummary }: Props
             />
             <CombatActionPanel
               canAct={canAct}
+              currentChoiceLabel={selectedAction ? actionDefinition?.label ?? "Escolhendo alvo" : currentChoiceDefinition?.label ?? "Aguardando ordem"}
+              isActionDisabled={isActionDisabled}
               selectedAction={selectedAction}
               selectedUnit={selectedUnit}
               targetHint={targetHint}

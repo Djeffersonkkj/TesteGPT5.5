@@ -8,7 +8,7 @@ import {
   isActiveRivalFactionId,
   isOfficialFactionId,
 } from "./constants";
-import { applyCombatConsequences, performPlayerCombatAction, type CombatActionRequest } from "./combat";
+import { advanceCombatRound, applyCombatConsequences, buildCombatConfig, effectiveCombatForce, performPlayerCombatAction, type CombatActionRequest } from "./combat";
 import { applyHungerAndRecovery, regenerateAreaFood, resolveDailyBananaProduction, summarizeFactionRelations } from "./economy";
 import { generatePendingDecisions } from "./events";
 import { normalizeAreaId } from "./map";
@@ -32,6 +32,7 @@ import type {
   Monkey,
   PendingDecision,
   Species,
+  CombatType,
   ToolName,
 } from "./types";
 import {
@@ -440,6 +441,37 @@ function processRoleAssignments(state: GameState, report: DailyReport): void {
   });
 }
 
+function createCombatConfigFor(
+  state: GameState,
+  attackers: Monkey[],
+  defenders: Monkey[],
+  playerCombatants: Monkey[],
+  enemyCombatants: Monkey[],
+  areaId: AreaId,
+  combatType: CombatType,
+) {
+  const area = getArea(state, areaId);
+  const isLeaderInvolved = [...attackers, ...defenders].some((monkey) => monkey.isLeader);
+  const isImportantArea = Boolean(area.isStartingBase || area.currentBananaProduction >= 30);
+  const finalCombatType: CombatType = isLeaderInvolved ? "leader" : isImportantArea ? "importantArea" : combatType;
+  const config = buildCombatConfig({
+    attackers,
+    defenders,
+    area,
+    isLeaderInvolved,
+    isImportantArea,
+    combatType,
+  });
+
+  return {
+    config,
+    combatType: finalCombatType,
+    maxRounds: config.maxRounds,
+    initialPlayerForce: Math.max(1, effectiveCombatForce(playerCombatants)),
+    initialEnemyForce: Math.max(1, effectiveCombatForce(enemyCombatants)),
+  };
+}
+
 function createCombatFromPlan(
   state: GameState,
   plan: GroupActionPlan,
@@ -495,6 +527,8 @@ function createCombatFromPlan(
     monkey.locationId = area.id;
     monkey.energy = clamp(monkey.energy - 4, 0, monkey.maxEnergy);
   });
+  const enemyCombatants = defenders.slice(0, Math.max(3, attackers.length));
+  const combatSetup = createCombatConfigFor(state, attackers, enemyCombatants, attackers, enemyCombatants, area.id, "common");
 
   state.pendingCombat = {
     id: uid("combat"),
@@ -503,16 +537,22 @@ function createCombatFromPlan(
     defenderFactionId,
     playerSide: "attacker",
     round: 1,
-    maxRounds: 3,
+    maxRounds: combatSetup.maxRounds,
+    config: combatSetup.config,
+    combatType: combatSetup.combatType,
     phase: "playerTurn",
     playerMonkeyIds: attackers.map((monkey) => monkey.id),
-    enemyMonkeyIds: defenders.slice(0, Math.max(3, attackers.length)).map((monkey) => monkey.id),
+    enemyMonkeyIds: enemyCombatants.map((monkey) => monkey.id),
     actedMonkeyIds: [],
     defendingMonkeyIds: [],
     protectedMonkeyIds: [],
+    exposedMonkeyIds: [],
     enemyMorale: Math.floor(average(defenders.map((monkey) => monkey.morale))) || getFaction(state, defenderFactionId).morale,
     lastEffects: [],
-    log: [`Conflito iniciado em ${area.name} contra ${getFaction(state, defenderFactionId).name}.`],
+    currentPlayerChoice: null,
+    initialPlayerForce: combatSetup.initialPlayerForce,
+    initialEnemyForce: combatSetup.initialEnemyForce,
+    log: [`Conflito iniciado em ${area.name} contra ${getFaction(state, defenderFactionId).name}. Maximo: ${combatSetup.maxRounds} rodada(s).`],
   };
 
   report.confirmed.push(
@@ -555,6 +595,7 @@ function createCombatFromEvent(
   enemies.forEach((monkey) => {
     monkey.locationId = area.id;
   });
+  const combatSetup = createCombatConfigFor(state, enemies, playerGroup, playerGroup, enemies, area.id, "ambush");
 
   state.pendingCombat = {
     id: uid("combat"),
@@ -563,16 +604,22 @@ function createCombatFromEvent(
     defenderFactionId: state.playerFactionId,
     playerSide: "defender",
     round: 1,
-    maxRounds: 3,
+    maxRounds: combatSetup.maxRounds,
+    config: combatSetup.config,
+    combatType: combatSetup.combatType,
     phase: "playerTurn",
     playerMonkeyIds: playerGroup.map((monkey) => monkey.id),
     enemyMonkeyIds: enemies.map((monkey) => monkey.id),
     actedMonkeyIds: [],
     defendingMonkeyIds: [],
     protectedMonkeyIds: [],
+    exposedMonkeyIds: [],
     enemyMorale: Math.floor(average(enemies.map((monkey) => monkey.morale))) || getFaction(state, rivalId).morale,
     lastEffects: [],
-    log: [`Emboscada iniciada em ${area.name} contra ${getFaction(state, rivalId).name}.`],
+    currentPlayerChoice: null,
+    initialPlayerForce: combatSetup.initialPlayerForce,
+    initialEnemyForce: combatSetup.initialEnemyForce,
+    log: [`Emboscada iniciada em ${area.name} contra ${getFaction(state, rivalId).name}. Maximo: ${combatSetup.maxRounds} rodada(s).`],
   };
   state.phase = "combat";
   state.workingReport = report;
@@ -1053,6 +1100,15 @@ export function chooseCombatAction(
   }
 
   return performPlayerCombatAction(next, request);
+}
+
+export function continueCombatRound(state: GameState): GameState {
+  const next = cloneState(state);
+  if (next.phase !== "combat" || !next.pendingCombat || !next.workingReport) {
+    return next;
+  }
+
+  return advanceCombatRound(next);
 }
 
 export function confirmCombatSummary(state: GameState): GameState {
