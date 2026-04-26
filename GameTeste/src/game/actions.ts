@@ -105,6 +105,9 @@ export function suggestMonkeysForAction(
     if (actionType === "steal") {
       return stats.stealth * 2 + stats.intelligence + monkey.energy / 18;
     }
+    if (actionType === "investigate") {
+      return stats.intelligence * 1.8 + stats.stealth + monkey.energy / 20;
+    }
     if (actionType === "patrol") {
       return stats.defense + stats.intelligence + stats.stealth * 0.6 + stable;
     }

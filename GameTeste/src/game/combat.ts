@@ -26,7 +26,6 @@ import type {
 } from "./types";
 import {
   average,
-  changeRelation,
   clamp,
   getArea,
   getFaction,
@@ -35,6 +34,7 @@ import {
   sample,
   updateMonkeyStatus,
 } from "./utils";
+import { updateFactionRelation, updatePlayerReputation } from "./world";
 
 export interface CombatActionRequest {
   action: CombatActionId;
@@ -1591,7 +1591,22 @@ export function applyCombatConsequences(state: GameState, report: DailyReport): 
     updateMonkeyStatus(monkey);
   });
   playerFaction.morale = clamp(playerFaction.morale + result.moraleDelta, 0, 100);
-  changeRelation(state, attacker.id, defender.id, result.relationDelta);
+  const relationState = updateFactionRelation(state, attacker.id, defender.id, {
+    day: state.day,
+    type: result.outcome === "victory" || result.outcome === "enemyFled" ? "ATTACKED_US" : "FOUGHT_COMMON_ENEMY",
+    description: `${attacker.name} e ${defender.name} lutaram em ${area.name}.`,
+    impact: {
+      score: result.relationDelta,
+      trust: result.relationDelta < 0 ? -6 : 2,
+      fear: result.outcome === "victory" ? 4 : 0,
+      respect: result.outcome === "victory" || result.outcome === "enemyFled" ? 4 : 0,
+      resentment: result.relationDelta < 0 ? 6 : -2,
+    },
+  });
+  Object.assign(state, relationState);
+  if (result.outcome === "victory" || result.outcome === "enemyFled") {
+    Object.assign(state, updatePlayerReputation(state, { type: "BATTLE_WON" }));
+  }
 
   report.confirmed.push(`${result.title} em ${area.name}: ${result.reason}`);
   result.lines.slice(1).forEach((line) => report.confirmed.push(line));

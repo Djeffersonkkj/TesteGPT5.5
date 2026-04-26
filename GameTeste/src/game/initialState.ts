@@ -8,6 +8,7 @@ import {
 import { createMapAreas, normalizeAreaId } from "./map";
 import { createReport } from "./reports";
 import { getDefaultSkillsForSpecies, getInitialStatsForSpecies } from "./skills";
+import { generateFactionBehaviorProfile, initializeFactionRelations } from "./world";
 import type {
   AreaId,
   DailyRole,
@@ -370,6 +371,7 @@ export function generateFactionMonkeys(params: {
 }
 
 export function createInitialState(options: StartOptions): GameState {
+  const campaignSeed = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const factions = [
     createFaction(
       PLAYER_FACTION_ID,
@@ -448,10 +450,36 @@ export function createInitialState(options: StartOptions): GameState {
     groupPlans: [],
     pendingDecisions: [],
     pendingCombat: null,
+    factionRelations: [],
+    factionBehaviorProfiles: {
+      [STONE_FACTION_ID]: generateFactionBehaviorProfile(STONE_FACTION_ID, campaignSeed),
+      [GOLD_FACTION_ID]: generateFactionBehaviorProfile(GOLD_FACTION_ID, campaignSeed),
+    },
+    temporaryPacts: [],
+    theftEvents: [],
+    rumors: [],
+    secretPlans: [],
+    internalEvents: [],
+    factionRequests: [],
+    playerReputation: {
+      honor: 50,
+      cruelty: 10,
+      reliability: 50,
+      strength: 35,
+      cunning: 20,
+    },
+    worldEventCounters: {
+      day: 1,
+      internalReactions: 0,
+      diplomaticEvents: 0,
+      theftEvents: 0,
+      rumors: 0,
+    },
     logs: ["A campanha começou no Vale das Frutas."],
     gameOver: null,
   };
 
-  syncAreaMonkeyVisibility(state);
-  return state;
+  const initialized = initializeFactionRelations(state);
+  syncAreaMonkeyVisibility(initialized);
+  return initialized;
 }

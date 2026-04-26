@@ -36,6 +36,7 @@ import {
   uid,
   updateMonkeyStatus,
 } from "./utils";
+import { attemptBananaTheft } from "./world";
 
 type AreaScore = {
   area: Area;
@@ -444,7 +445,7 @@ function actionRole(actionType: GroupActionType): Role {
   if (actionType === "craft") {
     return "Artesão";
   }
-  if (actionType === "explore" || actionType === "steal") {
+  if (actionType === "explore" || actionType === "steal" || actionType === "investigate") {
     return "Explorador";
   }
   return "Coletor";
@@ -471,6 +472,9 @@ function speciesPriorityForAction(faction: Faction, actionType: GroupActionType,
       monkey.stealth * 3 +
       monkey.intelligence
     );
+  }
+  if (actionType === "investigate") {
+    return monkey.intelligence * 3 + monkey.stealth * 1.4 + (monkey.species === "Macaco-prego" ? 14 : 0);
   }
   if (actionType === "patrol") {
     return monkey.defense * 3 + monkey.attack + (monkey.species === "Gorila" || monkey.species === "Mandril" ? 8 : 0);
@@ -631,43 +635,25 @@ function stealFood(
       ? area.ownerFactionId
       : state.playerFactionId;
   const target = getFaction(state, targetFactionId);
-  const stealth = members.reduce((sum, monkey) => sum + monkey.stealth + monkey.energy / 20, 0) + faction.stealthBias;
-  const guards = livingFactionMonkeys(state, target.id).filter((monkey) => monkey.locationId === area.id);
-  const defense = guards.reduce((sum, monkey) => sum + monkey.defense + monkey.intelligence, 0) + area.dangerLevel * 2;
-  const stolen = Math.min(target.food.bananas, 2 + Math.floor(Math.random() * 5));
 
   members.forEach((monkey) => {
     monkey.locationId = area.id;
   });
   spendEnergy(members, 12);
 
-  if (stolen > 0 && stealth + Math.random() * 16 > defense + Math.random() * 10) {
-    target.food.bananas -= stolen;
-    faction.food.bananas += stolen;
-    changeRelation(state, faction.id, target.id, -8);
-    addFactionReport(
-      state,
-      report,
-      area,
-      `${faction.name} roubou ${stolen} banana(s) perto de ${area.name}.`,
-      `${faction.name} foi visto rondando estoques de comida em ${area.name}.`,
-      `${stolen} banana(s) sumiram e há rastros rivais perto de ${area.name}.`,
-    );
-    pushLog(state, `${faction.name} parece estar se movendo em direção às fontes de comida.`);
-    return;
-  }
-
-  members.forEach((monkey) => {
-    monkey.morale = clamp(monkey.morale - 3, 0, 100);
+  state.workingReport = report;
+  const resolved = attemptBananaTheft({
+    gameState: state,
+    thiefFactionId: faction.id,
+    victimFactionId: target.id,
+    areaId: area.id,
+    thiefMonkeyIds: members.map((monkey) => monkey.id),
   });
-  addFactionReport(
-    state,
-    report,
-    area,
-    `${faction.name} tentou roubar comida em ${area.name}, mas foi percebido.`,
-    `Vigias ouviram correria perto dos estoques de ${area.name}.`,
-    `Rastros confusos sugerem tentativa de roubo em ${area.name}.`,
-  );
+  if (resolved.workingReport) {
+    Object.assign(report, resolved.workingReport);
+    resolved.workingReport = report;
+  }
+  Object.assign(state, resolved);
 }
 
 function negotiateForFaction(

@@ -5,6 +5,7 @@ import { getDefaultSkillsForSpecies, getInitialStatsForSpecies } from "./skills"
 import { STONE_FACTION_ID, isOfficialFactionId, isRemovedFactionId } from "./constants";
 import type { Area, AreaId, GameState, Species } from "./types";
 import { syncAreaMonkeyVisibility } from "./utils";
+import { initializeFactionRelations } from "./world";
 
 const SAVE_KEY = "ilha-dos-macacos-save-v1";
 
@@ -148,8 +149,9 @@ function normalizeSavedGame(state: GameState): GameState {
     state.workingReport = createReport(state.day);
   }
 
-  syncAreaMonkeyVisibility(state);
-  return state;
+  const normalized = initializeFactionRelations(state);
+  syncAreaMonkeyVisibility(normalized);
+  return normalized;
 }
 
 export function saveGame(state: GameState): void {

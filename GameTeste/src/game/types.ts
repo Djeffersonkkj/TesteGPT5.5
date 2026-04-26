@@ -99,6 +99,7 @@ export type GroupActionType =
   | "attack"
   | "negotiate"
   | "steal"
+  | "investigate"
   | "recruit"
   | "patrol"
   | "craft";
@@ -170,6 +171,272 @@ export interface FoodStock {
   herbs: number;
 }
 
+export type FactionRelationStatus =
+  | "WAR"
+  | "HOSTILE"
+  | "TENSE"
+  | "NEUTRAL"
+  | "FRIENDLY"
+  | "TRUCE"
+  | "TEMPORARY_ALLIANCE";
+
+export type DiplomaticMemoryType =
+  | "ATTACKED_US"
+  | "HELPED_IN_COMBAT"
+  | "BROKE_TRUCE"
+  | "SHARED_FOOD"
+  | "STOLE_FOOD"
+  | "RETURNED_PRISONER"
+  | "KILLED_LEADER"
+  | "SPARED_WOUNDED"
+  | "ABANDONED_ALLY"
+  | "NEGOTIATED_FAIRLY"
+  | "THREATENED_US"
+  | "DEFENDED_OUR_AREA"
+  | "BETRAYED_US"
+  | "FOUGHT_COMMON_ENEMY";
+
+export type DiplomaticMemory = {
+  day: number;
+  type: DiplomaticMemoryType;
+  description: string;
+  impact: {
+    score?: number;
+    trust?: number;
+    fear?: number;
+    respect?: number;
+    resentment?: number;
+  };
+};
+
+export type FactionRelation = {
+  factionAId: string;
+  factionBId: string;
+  score: number;
+  status: FactionRelationStatus;
+  trust: number;
+  fear: number;
+  respect: number;
+  resentment: number;
+  lastMajorEvents: DiplomaticMemory[];
+  truceUntilDay?: number;
+  allianceUntilDay?: number;
+};
+
+export type FactionBehaviorProfile = {
+  factionId: string;
+  aggression: number;
+  diplomacy: number;
+  honor: number;
+  greed: number;
+  paranoia: number;
+  betrayalChance: number;
+  riskTolerance: number;
+  foodDesperation: number;
+  revengeFocus: number;
+};
+
+export type DiplomaticAction =
+  | "REQUEST_TRUCE"
+  | "REQUEST_FOOD_TRADE"
+  | "REQUEST_MILITARY_HELP"
+  | "OFFER_FOOD"
+  | "THREATEN"
+  | "PROPOSE_TEMPORARY_ALLIANCE"
+  | "REQUEST_SAFE_PASSAGE"
+  | "ACCUSE_OF_THEFT";
+
+export type DiplomaticEffect = {
+  type:
+    | "RELATION"
+    | "REPUTATION"
+    | "PACT"
+    | "SECRET_PLAN"
+    | "FOOD"
+    | "REPORT"
+    | "REQUEST";
+  factionId?: string;
+  targetFactionId?: string;
+  value?: number;
+  text?: string;
+  pactId?: string;
+  secretPlanId?: string;
+};
+
+export type DiplomaticDecisionResult = {
+  accepted: boolean;
+  hiddenIntent?: "HONEST" | "OPPORTUNISTIC" | "BETRAYAL" | "DELAY" | "EXPLOIT";
+  publicMessage: string;
+  privateReason?: string;
+  effects: DiplomaticEffect[];
+};
+
+export type TemporaryPact = {
+  id: string;
+  factions: string[];
+  type: "TRUCE" | "TEMPORARY_ALLIANCE" | "SAFE_PASSAGE";
+  startDay: number;
+  endDay: number;
+  terms: string[];
+  trustModifier: number;
+  secretBetrayalPlan?: {
+    factionId: string;
+    plannedDay: number;
+    reason: string;
+  };
+};
+
+export type MonkeyOpinion = {
+  loyaltyToLeader: number;
+  fearOfLeader: number;
+  trustInLeader: number;
+  anger: number;
+  hope: number;
+};
+
+export type InternalEventEffect = {
+  type:
+    | "MORALE"
+    | "OPINION"
+    | "RELATION"
+    | "REPUTATION"
+    | "PACT"
+    | "INVESTIGATION"
+    | "REPORT";
+  value?: number;
+  target?: string;
+  factionId?: string;
+  text?: string;
+};
+
+export type InternalEventChoice = {
+  id: string;
+  label: string;
+  description: string;
+  effects: InternalEventEffect[];
+};
+
+export type InternalEvent = {
+  id: string;
+  day: number;
+  title: string;
+  description: string;
+  choices: InternalEventChoice[];
+  expiresAtDay?: number;
+};
+
+export type TheftDetectionLevel = "NONE" | "SUSPICION" | "PARTIAL" | "CONFIRMED";
+
+export type TheftEvidence = {
+  type:
+    | "FOOTPRINTS"
+    | "BROKEN_STORAGE"
+    | "WITNESS"
+    | "DROPPED_ITEM"
+    | "SCENT"
+    | "BANANA_PEELS"
+    | "TOOL_MARKS"
+    | "KNOWN_STYLE";
+  description: string;
+  pointsToFactionId?: string;
+  reliability: number;
+};
+
+export type TheftEvent = {
+  id: string;
+  day: number;
+  areaId: AreaId;
+  thiefFactionId: string;
+  thiefMonkeyIds: string[];
+  victimFactionId: string;
+  bananasStolen: number;
+  detected: boolean;
+  detectionLevel: TheftDetectionLevel;
+  evidence: TheftEvidence[];
+  resolved: boolean;
+};
+
+export type TheftDetectionResult = {
+  detected: boolean;
+  detectionLevel: TheftDetectionLevel;
+  evidence: TheftEvidence[];
+  caughtMonkeyIds?: string[];
+};
+
+export type SecretPlan = {
+  id: string;
+  factionId: string;
+  targetFactionId: string;
+  type:
+    | "BETRAY_TRUCE"
+    | "STEAL_FOOD"
+    | "AMBUSH"
+    | "FAKE_ALLIANCE"
+    | "SPREAD_RUMOR"
+    | "ABANDON_IN_BATTLE"
+    | "CAPTURE_AREA_AFTER_HELP";
+  createdDay: number;
+  executeAfterDay: number;
+  areaId?: AreaId;
+  discovered: boolean;
+  cancelled: boolean;
+  reason: string;
+};
+
+export type FactionRequestEvent = {
+  id: string;
+  day: number;
+  fromFactionId: string;
+  requestType:
+    | "HELP_IN_BATTLE"
+    | "FOOD_AID"
+    | "TRUCE"
+    | "SAFE_PASSAGE"
+    | "JOIN_ATTACK"
+    | "TRADE_INFORMATION"
+    | "RETURN_PRISONER";
+  targetFactionId?: string;
+  areaId?: AreaId;
+  description: string;
+  choices: FactionRequestChoice[];
+  hiddenIntent?: "HONEST" | "DESPERATE" | "MANIPULATIVE" | "TRAP" | "TEST";
+};
+
+export type FactionRequestChoice = {
+  id: string;
+  label: string;
+  description: string;
+  effects: DiplomaticEffect[];
+};
+
+export type PlayerReputation = {
+  honor: number;
+  cruelty: number;
+  reliability: number;
+  strength: number;
+  cunning: number;
+};
+
+export type Rumor = {
+  id: string;
+  day: number;
+  source?: string;
+  targetFactionId?: string;
+  areaId?: AreaId;
+  content: string;
+  truthLevel: "FALSE" | "PARTIAL" | "TRUE";
+  discoveredTruth?: boolean;
+  relatedEventId?: string;
+};
+
+export type WorldEventCounters = {
+  day: number;
+  internalReactions: number;
+  diplomaticEvents: number;
+  theftEvents: number;
+  rumors: number;
+};
+
 export interface Area {
   id: AreaId;
   name: string;
@@ -237,6 +504,7 @@ export interface Monkey {
   plannedAction: PlannedAction | null;
   inventory: ToolName[];
   isLeader: boolean;
+  opinion?: MonkeyOpinion;
 }
 
 export type AiPersonality = "player" | "stone" | "gold";
@@ -268,6 +536,10 @@ export interface DailyReport {
   confirmed: string[];
   rumors: string[];
   suspicions: string[];
+  tribeReactions: string[];
+  diplomacy: string[];
+  areaEvents: string[];
+  gainsAndLosses: string[];
   hungerSummary: string[];
   casualtySummary: string[];
   relationsSummary: string[];
@@ -424,6 +696,16 @@ export interface GameState {
   groupPlans: GroupActionPlan[];
   pendingDecisions: PendingDecision[];
   pendingCombat: PendingCombat | null;
+  factionRelations: FactionRelation[];
+  factionBehaviorProfiles: Record<string, FactionBehaviorProfile>;
+  temporaryPacts: TemporaryPact[];
+  theftEvents: TheftEvent[];
+  rumors: Rumor[];
+  secretPlans: SecretPlan[];
+  internalEvents: InternalEvent[];
+  factionRequests: FactionRequestEvent[];
+  playerReputation: PlayerReputation;
+  worldEventCounters?: WorldEventCounters;
   logs: string[];
   gameOver: GameOverInfo | null;
 }

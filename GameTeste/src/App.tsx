@@ -132,6 +132,22 @@ export default function App() {
         <ul>{state.report.suspicions.map((line) => <li key={line}>{line}</li>)}</ul>
       </section>
       <section className="report-block">
+        <h2>Reacoes da Tribo</h2>
+        <ul>{(state.report.tribeReactions ?? []).map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
+        <h2>Diplomacia</h2>
+        <ul>{(state.report.diplomacy ?? []).map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
+        <h2>Eventos de Area</h2>
+        <ul>{(state.report.areaEvents ?? []).map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
+        <h2>Perdas e Ganhos</h2>
+        <ul>{(state.report.gainsAndLosses ?? []).map((line) => <li key={line}>{line}</li>)}</ul>
+      </section>
+      <section className="report-block">
         <h2>Fome</h2>
         <ul>{state.report.hungerSummary.map((line) => <li key={line}>{line}</li>)}</ul>
       </section>
@@ -183,7 +199,7 @@ export default function App() {
         )}
         {activeModal === "report" && renderReport()}
         {activeModal === "notifications" && <NotificationModal state={state} />}
-        {activeModal === "diplomacy" && <FactionPanel state={state} />}
+        {activeModal === "diplomacy" && <FactionPanel state={state} onChange={persist} />}
         {activeModal === "inventory" && <InventoryPanel state={state} />}
       </GameModal>
     );

@@ -36,6 +36,7 @@ export const GROUP_ACTION_LABELS: Record<GroupActionType, string> = {
   attack: "Atacar",
   negotiate: "Negociar",
   steal: "Roubar",
+  investigate: "Investigar",
   recruit: "Recrutar peregrinos",
   patrol: "Patrulhar",
   craft: "Criar ferramentas",
@@ -47,10 +48,19 @@ export const ACTION_ROLE_HINT: Record<GroupActionType, Role> = {
   attack: "Guerreiro",
   negotiate: "Diplomata",
   steal: "Explorador",
+  investigate: "Explorador",
   recruit: "Diplomata",
   patrol: "Guarda",
   craft: "Artesão",
 };
+
+export const WORLD_EVENT_LIMITS = {
+  maxInternalReactionsPerDay: 2,
+  maxDiplomaticEventsPerDay: 1,
+  maxTheftEventsPerDay: 2,
+  maxRumorsPerDay: 3,
+  majorBetrayalCooldownDays: 12,
+} as const;
 
 export const SPECIES_PROFILES: Record<
   Species,

@@ -10,7 +10,7 @@ interface Props {
   onPlanAction: () => void;
 }
 
-const areaActions: GroupActionType[] = ["collect", "explore", "patrol", "attack", "negotiate", "steal", "recruit", "craft"];
+const areaActions: GroupActionType[] = ["collect", "explore", "patrol", "attack", "negotiate", "steal", "investigate", "recruit", "craft"];
 
 function SummaryPanel({ state }: { state: GameState }) {
   const player = state.factions.find((faction) => faction.id === state.playerFactionId)!;

@@ -56,6 +56,19 @@ import {
   uid,
   updateMonkeyStatus,
 } from "./utils";
+import {
+  buildDailyReport,
+  checkPactViolation,
+  createTemporaryPact,
+  expireTemporaryPacts,
+  generateDynamicRumors,
+  maybeCreateFactionRequest,
+  resolveAIFactionConflicts,
+  resolveGuardDuty,
+  resolveInternalTribeReactions,
+  resolveInvestigationAction,
+  resolveSecretPlans,
+} from "./world";
 
 function groupMembers(state: GameState, plan: GroupActionPlan): Monkey[] {
   return plan.monkeyIds
@@ -299,6 +312,31 @@ function resolveGroupSteal(
   }
 }
 
+function resolveGroupInvestigate(
+  state: GameState,
+  plan: GroupActionPlan,
+  report: DailyReport,
+): void {
+  const area = getArea(state, plan.areaId);
+  const members = groupMembers(state, plan);
+  members.forEach((monkey) => {
+    monkey.locationId = area.id;
+  });
+
+  state.workingReport = report;
+  const resolved = resolveInvestigationAction({
+    gameState: state,
+    investigatorMonkeyIds: members.map((monkey) => monkey.id),
+    areaId: area.id,
+  });
+  if (resolved.workingReport) {
+    Object.assign(report, resolved.workingReport);
+    resolved.workingReport = report;
+  }
+  Object.assign(state, resolved);
+  report.confirmed.push(`${members.length} investigador(es) procuraram pistas em ${area.name}.`);
+}
+
 function resolveGroupRecruit(
   state: GameState,
   plan: GroupActionPlan,
@@ -364,6 +402,8 @@ function resolveNonCombatGroupPlan(
     resolveGroupNegotiate(state, plan, report);
   } else if (plan.actionType === "steal") {
     resolveGroupSteal(state, plan, report);
+  } else if (plan.actionType === "investigate") {
+    resolveGroupInvestigate(state, plan, report);
   } else if (plan.actionType === "recruit") {
     resolveGroupRecruit(state, plan, report);
   } else if (plan.actionType === "patrol") {
@@ -512,6 +552,18 @@ function createCombatFromPlan(
     report.confirmed.push(`O ataque encontrou ${area.name} sem defesa clara. A área foi ocupada.`);
     return false;
   }
+
+  state.workingReport = report;
+  const pactChecked = checkPactViolation(state, {
+    factionId: state.playerFactionId,
+    targetFactionId: defenderFactionId,
+    actionType: "attack",
+  });
+  if (pactChecked.workingReport) {
+    Object.assign(report, pactChecked.workingReport);
+    pactChecked.workingReport = report;
+  }
+  Object.assign(state, pactChecked);
 
   let defenders = livingFactionMonkeys(state, defenderFactionId).filter(
     (monkey) => monkey.locationId === area.id,
@@ -924,6 +976,31 @@ function applyDecisionEffect(
     return;
   }
 
+  if (effect.type === "reputation" && effect.target) {
+    const key = effect.target as keyof GameState["playerReputation"];
+    if (state.playerReputation && key in state.playerReputation) {
+      state.playerReputation[key] = clamp(state.playerReputation[key] + value, 0, 100);
+    }
+    return;
+  }
+
+  if (effect.type === "createPact" && effect.factionId) {
+    const pactState = createTemporaryPact({
+      gameState: state,
+      factions: [state.playerFactionId, effect.factionId],
+      type: "TRUCE",
+      durationDays: Math.max(3, value || 4),
+      terms: [effect.text ?? "Evitar ataques diretos por alguns dias."],
+      trustModifier: 5,
+    });
+    if (pactState.workingReport) {
+      Object.assign(report, pactState.workingReport);
+      pactState.workingReport = report;
+    }
+    Object.assign(state, pactState);
+    return;
+  }
+
   if (effect.type === "hurtMonkey" && effect.target) {
     const monkey = state.monkeys.find((item) => item.id === effect.target);
     if (monkey) {
@@ -986,7 +1063,38 @@ function applyDecisionEffect(
 }
 
 function continueAfterResolution(state: GameState, report: DailyReport): GameState {
+  state.workingReport = report;
+  state = expireTemporaryPacts(state);
+  report = state.workingReport ?? report;
+  state.workingReport = report;
+
+  state = resolveGuardDuty(state);
+  report = state.workingReport ?? report;
+  state.workingReport = report;
+
   resolveEnemyAI(state, report);
+  state.workingReport = report;
+
+  state = resolveAIFactionConflicts(state);
+  report = state.workingReport ?? report;
+  state.workingReport = report;
+
+  state = resolveSecretPlans(state);
+  report = state.workingReport ?? report;
+  state.workingReport = report;
+
+  state = maybeCreateFactionRequest(state);
+  report = state.workingReport ?? report;
+  state.workingReport = report;
+
+  state = generateDynamicRumors(state);
+  report = state.workingReport ?? report;
+  state.workingReport = report;
+
+  state = resolveInternalTribeReactions(state);
+  report = state.workingReport ?? report;
+  state.workingReport = report;
+
   const decisions = generatePendingDecisions(state, report);
   if (decisions.length > 0) {
     state.pendingDecisions = decisions;
@@ -1017,7 +1125,7 @@ export function finalizeDay(state: GameState, report: DailyReport): GameState {
 
   syncAreaMonkeyVisibility(state);
   const gameOver = evaluateGameOver(state, report);
-  state.report = ensureReportHasContent(report);
+  state.report = buildDailyReport({ ...state, report: ensureReportHasContent(report) });
   state.workingReport = null;
   state.pendingCombat = null;
   state.pendingDecisions = [];

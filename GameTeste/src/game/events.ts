@@ -1,5 +1,6 @@
 import { GOLD_FACTION_ID, STONE_FACTION_ID } from "./constants";
 import type { DailyReport, GameState, GroupActionPlan, Monkey, PendingDecision } from "./types";
+import { createFactionRequestDecision } from "./world";
 import {
   clamp,
   getFaction,
@@ -215,6 +216,7 @@ function createFactionOfferDecision(state: GameState, factionId: string): Pendin
         description: "Melhora relacao agora, mas pode parecer fraqueza para outros rivais.",
         effects: [
           { type: "relation", factionId: faction.id, value: isStone ? 12 : 10 },
+          { type: "createPact", factionId: faction.id, value: isStone ? 4 : 5 },
           { type: "food", value: isStone ? 0 : 3 },
           { type: "addReport", reportLevel: "confirmado", text: `A tribo aceitou um acordo temporario com ${faction.name}.` },
         ],
@@ -270,6 +272,11 @@ export function generatePendingDecisions(state: GameState, report: DailyReport):
   });
   if (riskyExplore && roll(0.8)) {
     pushed(decisions, 3, createRuinDecision(riskyExplore));
+  }
+
+  const request = state.factionRequests.find((item) => item.day === state.day);
+  if (request && !decisions.some((decision) => decision.id === `faction-request-${request.id}`)) {
+    pushed(decisions, 3, createFactionRequestDecision(state, request));
   }
 
   const gold = state.factions.find((faction) => faction.id === GOLD_FACTION_ID && faction.alive);

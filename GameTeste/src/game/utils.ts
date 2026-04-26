@@ -86,6 +86,28 @@ export function changeRelation(
   const factionB = getFaction(state, b);
   factionA.relations[b] = clamp((factionA.relations[b] ?? 0) + delta, -100, 100);
   factionB.relations[a] = clamp((factionB.relations[a] ?? 0) + delta, -100, 100);
+  const relation = state.factionRelations?.find((item) => {
+    const ids = [item.factionAId, item.factionBId].sort().join("__");
+    return ids === [a, b].sort().join("__");
+  });
+  if (!relation) {
+    return;
+  }
+  relation.score = clamp(relation.score + delta, -100, 100);
+  if (relation.status === "TRUCE" || relation.status === "TEMPORARY_ALLIANCE") {
+    return;
+  }
+  if (relation.score <= -70) {
+    relation.status = "WAR";
+  } else if (relation.score <= -35) {
+    relation.status = "HOSTILE";
+  } else if (relation.score <= -10) {
+    relation.status = "TENSE";
+  } else if (relation.score <= 20) {
+    relation.status = "NEUTRAL";
+  } else {
+    relation.status = "FRIENDLY";
+  }
 }
 
 export function updateMonkeyStatus(monkey: Monkey): MonkeyStatus {

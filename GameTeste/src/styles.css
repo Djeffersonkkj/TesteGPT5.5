@@ -501,6 +501,36 @@ select {
   border-radius: 50%;
 }
 
+.compact-stat-grid {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eadbbf;
+}
+
+.relation-card-list {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  margin-top: 14px;
+}
+
+.relation-card {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 0;
+  border-top: 1px solid #eadbbf;
+}
+
+.relation-card .relation-row {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.relation-card small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .log-panel {
   max-height: 230px;
   overflow: auto;

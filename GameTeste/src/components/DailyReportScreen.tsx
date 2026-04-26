@@ -34,9 +34,13 @@ export default function DailyReportScreen({ report, currentDay, onContinue }: Pr
           <ReportBlock title="Confirmado" items={report.confirmed} />
           <ReportBlock title="Rumores" items={report.rumors} />
           <ReportBlock title="Suspeitas" items={report.suspicions} />
+          <ReportBlock title="Reacoes da Tribo" items={report.tribeReactions ?? []} />
+          <ReportBlock title="Diplomacia" items={report.diplomacy ?? []} />
+          <ReportBlock title="Eventos de Area" items={report.areaEvents ?? []} />
+          <ReportBlock title="Perdas e Ganhos" items={report.gainsAndLosses ?? []} />
           <ReportBlock title="Fome" items={report.hungerSummary} />
           <ReportBlock title="Mortes e feridos" items={report.casualtySummary} />
-          <ReportBlock title="Relações" items={report.relationsSummary} />
+          <ReportBlock title="Relacoes" items={report.relationsSummary} />
         </div>
 
         <button className="primary-button report-button" onClick={onContinue}>
