@@ -1,4 +1,4 @@
-import { TERRAIN_LABELS } from "../game/constants";
+import { TERRAIN_LABELS, isOfficialFactionId } from "../game/constants";
 import { canMoveToArea, normalizeAreaId } from "../game/map";
 import type { Area, GameState } from "../game/types";
 import { livingFactionMonkeys } from "../game/utils";
@@ -9,7 +9,9 @@ interface Props {
 }
 
 export default function AreaPanel({ area, state }: Props) {
-  const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
+  const owner = isOfficialFactionId(area.ownerFactionId)
+    ? state.factions.find((faction) => faction.id === area.ownerFactionId)
+    : undefined;
   const playerMonkeysHere = livingFactionMonkeys(state, state.playerFactionId).filter(
     (monkey) => normalizeAreaId(monkey.locationId) === area.id,
   );

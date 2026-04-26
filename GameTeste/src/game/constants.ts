@@ -3,6 +3,21 @@ import type { GroupActionType, Role, Species, Terrain, ToolName } from "./types"
 export const PLAYER_FACTION_ID = "player";
 export const STONE_FACTION_ID = "stone";
 export const GOLD_FACTION_ID = "gold";
+export const REMOVED_FACTION_IDS = ["shadow"] as const;
+export const ACTIVE_RIVAL_FACTION_IDS = [STONE_FACTION_ID, GOLD_FACTION_ID] as const;
+export const OFFICIAL_FACTION_IDS = [PLAYER_FACTION_ID, ...ACTIVE_RIVAL_FACTION_IDS] as const;
+
+export function isOfficialFactionId(factionId: string | null | undefined): boolean {
+  return Boolean(factionId && (OFFICIAL_FACTION_IDS as readonly string[]).includes(factionId));
+}
+
+export function isActiveRivalFactionId(factionId: string | null | undefined): boolean {
+  return Boolean(factionId && (ACTIVE_RIVAL_FACTION_IDS as readonly string[]).includes(factionId));
+}
+
+export function isRemovedFactionId(factionId: string | null | undefined): boolean {
+  return Boolean(factionId && (REMOVED_FACTION_IDS as readonly string[]).includes(factionId));
+}
 
 export const ROLES: Role[] = [
   "Coletor",

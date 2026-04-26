@@ -2,12 +2,11 @@ import { createMapAreas, normalizeAreaId } from "./map";
 import { currentBananaProductionForDay } from "./economy";
 import { createReport } from "./reports";
 import { getDefaultSkillsForSpecies, getInitialStatsForSpecies } from "./skills";
+import { STONE_FACTION_ID, isOfficialFactionId, isRemovedFactionId } from "./constants";
 import type { Area, AreaId, GameState, Species } from "./types";
 import { syncAreaMonkeyVisibility } from "./utils";
 
 const SAVE_KEY = "ilha-dos-macacos-save-v1";
-const STONE_FACTION_ID = "stone";
-const REMOVED_FACTION_IDS = new Set(["shadow"]);
 
 type SavedArea = Partial<Area> & { id?: string };
 
@@ -40,7 +39,7 @@ function normalizeSavedGame(state: GameState): GameState {
       if ((area.id === "aldeia-cipo" || area.id === "trovao") && saved?.ownerFactionId === STONE_FACTION_ID) {
         return area.ownerFactionId;
       }
-      if (saved?.ownerFactionId && REMOVED_FACTION_IDS.has(saved.ownerFactionId)) {
+      if (saved?.ownerFactionId && (isRemovedFactionId(saved.ownerFactionId) || !isOfficialFactionId(saved.ownerFactionId))) {
         return area.ownerFactionId;
       }
       if (area.id === "montanha" && saved?.ownerFactionId == null) {
@@ -73,15 +72,15 @@ function normalizeSavedGame(state: GameState): GameState {
 
   state.selectedAreaId = normalizeSavedAreaRef(String(state.selectedAreaId), legacyMap, true);
   state.factions = (state.factions ?? [])
-    .filter((faction) => !REMOVED_FACTION_IDS.has(faction.id))
+    .filter((faction) => isOfficialFactionId(faction.id))
     .map((faction) => ({
       ...faction,
       relations: Object.fromEntries(
-        Object.entries(faction.relations ?? {}).filter(([factionId]) => !REMOVED_FACTION_IDS.has(factionId)),
+        Object.entries(faction.relations ?? {}).filter(([factionId]) => isOfficialFactionId(factionId)),
       ),
     }));
 
-  state.monkeys = (state.monkeys ?? []).filter((monkey) => !REMOVED_FACTION_IDS.has(monkey.factionId)).map((monkey) => {
+  state.monkeys = (state.monkeys ?? []).filter((monkey) => isOfficialFactionId(monkey.factionId)).map((monkey) => {
     const savedLocationId = normalizeSavedAreaRef(
       String(monkey.locationId),
       legacyMap,
@@ -134,7 +133,7 @@ function normalizeSavedGame(state: GameState): GameState {
     };
     const existingMonkeyIds = new Set(state.monkeys.map((monkey) => monkey.id));
     const removedFactionCombat =
-      REMOVED_FACTION_IDS.has(combat.attackerFactionId) || REMOVED_FACTION_IDS.has(combat.defenderFactionId);
+      !isOfficialFactionId(combat.attackerFactionId) || !isOfficialFactionId(combat.defenderFactionId);
     const missingCombatants = [...combat.playerMonkeyIds, ...combat.enemyMonkeyIds].some(
       (monkeyId) => !existingMonkeyIds.has(monkeyId),
     );

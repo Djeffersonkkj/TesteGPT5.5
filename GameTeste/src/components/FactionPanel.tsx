@@ -1,3 +1,4 @@
+import { isActiveRivalFactionId } from "../game/constants";
 import { foodTotal, countTerritories, livingFactionMonkeys } from "../game/utils";
 import type { GameState } from "../game/types";
 
@@ -29,7 +30,7 @@ export default function FactionPanel({ state }: Props) {
       </div>
       <div className="relations-list">
         {state.factions
-          .filter((faction) => faction.id !== player.id)
+          .filter((faction) => isActiveRivalFactionId(faction.id))
           .map((faction) => (
             <div key={faction.id} className="relation-row">
               <span style={{ background: faction.color }} />

@@ -1,4 +1,4 @@
-import { PLAYER_FACTION_ID } from "./constants";
+import { PLAYER_FACTION_ID, isActiveRivalFactionId, isOfficialFactionId } from "./constants";
 import type { DailyReport, Faction, FactionFoodResult, GameState, MapArea, Monkey } from "./types";
 import {
   average,
@@ -107,7 +107,7 @@ function reportDailyBananaProduction(
   results: FactionFoodResult[],
 ): void {
   const playerResult = results.find((result) => result.factionId === state.playerFactionId);
-  const enemyResults = results.filter((result) => result.factionId !== state.playerFactionId);
+  const enemyResults = results.filter((result) => isActiveRivalFactionId(result.factionId));
 
   if (playerResult) {
     report.confirmed.push(
@@ -157,7 +157,7 @@ export function resolveDailyBananaProduction(
     const results = calculateAreaBananaDistribution(area, gameState.monkeys);
     results.forEach((result) => {
       const faction = gameState.factions.find((item) => item.id === result.factionId);
-      if (!faction || !faction.alive) {
+      if (!faction || !faction.alive || !isOfficialFactionId(faction.id)) {
         return;
       }
       faction.food.bananas += result.bananasGained;
@@ -212,7 +212,7 @@ function recoverFromRest(monkey: Monkey): void {
 
 export function applyHungerAndRecovery(state: GameState, report: DailyReport): void {
   state.factions.forEach((faction) => {
-    if (!faction.alive) {
+    if (!faction.alive || !isOfficialFactionId(faction.id)) {
       return;
     }
 
@@ -295,7 +295,7 @@ export function applyHungerAndRecovery(state: GameState, report: DailyReport): v
 export function summarizeFactionRelations(state: GameState, report: DailyReport): void {
   const player = getFaction(state, state.playerFactionId);
   state.factions
-    .filter((faction) => faction.id !== player.id && faction.alive)
+    .filter((faction) => isActiveRivalFactionId(faction.id) && faction.alive)
     .forEach((faction) => {
       const relation = player.relations[faction.id] ?? 0;
       let mood = "neutra";

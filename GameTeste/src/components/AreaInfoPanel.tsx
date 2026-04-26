@@ -1,5 +1,5 @@
 import { ASSETS, factionFlag, monkeyPortrait } from "../game/assets";
-import { GROUP_ACTION_LABELS, TERRAIN_LABELS } from "../game/constants";
+import { GROUP_ACTION_LABELS, TERRAIN_LABELS, isActiveRivalFactionId, isOfficialFactionId } from "../game/constants";
 import { canMoveToArea, normalizeAreaId } from "../game/map";
 import type { Area, GameState, GroupActionType } from "../game/types";
 import { average, countTerritories, foodTotal, livingFactionMonkeys, playerMonkeys } from "../game/utils";
@@ -15,7 +15,7 @@ const areaActions: GroupActionType[] = ["collect", "explore", "patrol", "attack"
 function SummaryPanel({ state }: { state: GameState }) {
   const player = state.factions.find((faction) => faction.id === state.playerFactionId)!;
   const monkeys = playerMonkeys(state);
-  const relations = state.factions.filter((faction) => faction.id !== player.id);
+  const relations = state.factions.filter((faction) => isActiveRivalFactionId(faction.id));
 
   return (
     <section className="panel area-info-card">
@@ -54,7 +54,9 @@ export default function AreaInfoPanel({ area, state, onPlanAction }: Props) {
     return <SummaryPanel state={state} />;
   }
 
-  const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
+  const owner = isOfficialFactionId(area.ownerFactionId)
+    ? state.factions.find((faction) => faction.id === area.ownerFactionId)
+    : undefined;
   const playerHere = livingFactionMonkeys(state, state.playerFactionId).filter(
     (monkey) => normalizeAreaId(monkey.locationId) === area.id,
   );

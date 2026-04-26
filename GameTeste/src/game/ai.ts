@@ -1,6 +1,8 @@
 import {
   ENEMY_NAMES,
   GOLD_FACTION_ID,
+  isActiveRivalFactionId,
+  isOfficialFactionId,
   STONE_FACTION_ID,
   TOOLS,
 } from "./constants";
@@ -117,7 +119,7 @@ function distanceBetweenAreas(state: GameState, from: AreaId, to: AreaId): numbe
 
 function buildFactionContext(state: GameState, factionId: string): FactionContext | null {
   const faction = state.factions.find((item) => item.id === factionId && item.alive);
-  if (!faction || faction.isPlayer) {
+  if (!faction || faction.isPlayer || !isActiveRivalFactionId(faction.id)) {
     return null;
   }
 
@@ -145,6 +147,10 @@ function buildFactionContext(state: GameState, factionId: string): FactionContex
 }
 
 function defendersForArea(state: GameState, area: Area, factionId: string): Monkey[] {
+  if (area.ownerFactionId && !isOfficialFactionId(area.ownerFactionId)) {
+    return [];
+  }
+
   const present = livingFactionMonkeys(state, area.ownerFactionId ?? "").filter(
     (monkey) => monkey.locationId === area.id,
   );
@@ -164,8 +170,8 @@ function scoreAreaForFaction(state: GameState, ctx: FactionContext, area: Area):
   const defenders = defendersForArea(state, area, ctx.faction.id);
   const defenderPower = defenders.length > 0 ? combatPower(defenders) : 0;
   const ownedBySelf = area.ownerFactionId === ctx.faction.id;
-  const enemyOwned = area.ownerFactionId !== null && !ownedBySelf;
-  const neutral = area.ownerFactionId === null;
+  const enemyOwned = area.ownerFactionId !== null && isOfficialFactionId(area.ownerFactionId) && !ownedBySelf;
+  const neutral = area.ownerFactionId === null || !isOfficialFactionId(area.ownerFactionId);
 
   const bananaProductionValue = area.currentBananaProduction * (ctx.isStone ? 1.45 : 1.2) + area.currentFood * 0.6;
   const strategicValue =
@@ -238,12 +244,36 @@ function bestOwnedImportantArea(state: GameState, ctx: FactionContext): Area | n
 function weakestEnemyNearFood(state: GameState, ctx: FactionContext): AreaScore | null {
   return (
     rankedAreas(state, ctx, (area) => {
-      if (!area.ownerFactionId || area.ownerFactionId === ctx.faction.id) {
+      if (!area.ownerFactionId || area.ownerFactionId === ctx.faction.id || !isOfficialFactionId(area.ownerFactionId)) {
         return false;
       }
       return area.currentBananaProduction >= 18 && distanceBetweenAreas(state, ctx.mainAreaId, area.id) <= 2;
     }).find((score) => ctx.ownPower > score.defenderPower * 0.8) ?? null
   );
+}
+
+function hasStealthOperators(ctx: FactionContext): boolean {
+  const stealthSpecialists = ctx.monkeys.filter(
+    (monkey) => monkey.species === "Gibão" || monkey.species === "Macaco-prego" || monkey.stealth >= 7,
+  );
+  const averageStealth = average(ctx.monkeys.map((monkey) => monkey.stealth));
+  return stealthSpecialists.length > 0 || averageStealth >= 5.5 || ctx.faction.stealthBias >= 6;
+}
+
+function shouldUseStealthRaid(
+  ctx: FactionContext,
+  target: AreaScore | null,
+  desperate: boolean,
+): boolean {
+  if (!target?.area.ownerFactionId || target.area.ownerFactionId === ctx.faction.id) {
+    return false;
+  }
+  if (!isOfficialFactionId(target.area.ownerFactionId)) {
+    return false;
+  }
+
+  const outmatched = target.defenderPower > ctx.ownPower * 0.75;
+  return hasStealthOperators(ctx) || desperate || outmatched;
 }
 
 export function decideFactionDailyPlans(gameState: GameState, factionId: string): PlannedAction[] {
@@ -261,6 +291,7 @@ export function decideFactionDailyPlans(gameState: GameState, factionId: string)
   const criticalFood = ctx.foodDays < 1 || ctx.bananaDays < 1;
   const lowFood = ctx.foodDays < 3 || ctx.bananaDays < 2;
   const enemyWeakArea = weakestEnemyNearFood(gameState, ctx);
+  const desperate = criticalFood || moraleLow || ctx.monkeys.length <= 4;
 
   if (moraleLow) {
     plans.push(rolePlan("Descansando"));
@@ -275,7 +306,7 @@ export function decideFactionDailyPlans(gameState: GameState, factionId: string)
   if (ctx.isStone) {
     if (criticalFood && foodTarget) {
       const actionType =
-        foodTarget.area.ownerFactionId && foodTarget.defenderPower > ctx.ownPower * 0.9 ? "steal" : "attack";
+        shouldUseStealthRaid(ctx, foodTarget, true) && foodTarget.defenderPower > ctx.ownPower * 0.75 ? "steal" : "attack";
       plans.push(groupPlan(actionType, foodTarget.area.id));
       if (guardedArea && ctx.monkeys.length >= 7) {
         plans.push(groupPlan("patrol", guardedArea.id));
@@ -285,7 +316,13 @@ export function decideFactionDailyPlans(gameState: GameState, factionId: string)
 
     if (lowFood) {
       if (foodTarget && foodTarget.score > 8) {
-        plans.push(groupPlan(foodTarget.area.ownerFactionId ? "attack" : "collect", foodTarget.area.id));
+        const actionType =
+          foodTarget.area.ownerFactionId && shouldUseStealthRaid(ctx, foodTarget, desperate)
+            ? "steal"
+            : foodTarget.area.ownerFactionId
+              ? "attack"
+              : "collect";
+        plans.push(groupPlan(actionType, foodTarget.area.id));
       } else {
         plans.push(groupPlan("collect", ownedFoodArea.id));
       }
@@ -308,7 +345,9 @@ export function decideFactionDailyPlans(gameState: GameState, factionId: string)
   if (ctx.isGold) {
     if (criticalFood) {
       plans.push(groupPlan("collect", ownedFoodArea.id));
-      if (roll(0.55)) {
+      if (shouldUseStealthRaid(ctx, foodTarget, true)) {
+        plans.push(groupPlan("steal", foodTarget!.area.id));
+      } else if (roll(0.55)) {
         plans.push(groupPlan("negotiate", ownedFoodArea.id));
       } else if (neutralFoodArea) {
         plans.push(groupPlan("explore", neutralFoodArea.area.id));
@@ -318,7 +357,9 @@ export function decideFactionDailyPlans(gameState: GameState, factionId: string)
 
     if (lowFood) {
       plans.push(groupPlan("collect", ownedFoodArea.id));
-      if (neutralFoodArea) {
+      if (shouldUseStealthRaid(ctx, foodTarget, desperate) && roll(0.55)) {
+        plans.push(groupPlan("steal", foodTarget!.area.id));
+      } else if (neutralFoodArea) {
         plans.push(groupPlan("explore", neutralFoodArea.area.id));
       } else if (roll(0.45)) {
         plans.push(groupPlan("recruit", ownedFoodArea.id));
@@ -423,7 +464,13 @@ function speciesPriorityForAction(faction: Faction, actionType: GroupActionType,
     return (monkey.species === "Macaco-prego" ? 20 : 0) + monkey.intelligence * 3 + monkey.energy / 15;
   }
   if (actionType === "explore" || actionType === "steal") {
-    return (monkey.species === "Gibão" ? 20 : 0) + monkey.stealth * 3 + monkey.intelligence;
+    return (
+      (monkey.species === "Gibão" ? 22 : 0) +
+      (monkey.species === "Macaco-prego" ? 18 : 0) +
+      (monkey.stealth >= 7 ? 10 : 0) +
+      monkey.stealth * 3 +
+      monkey.intelligence
+    );
   }
   if (actionType === "patrol") {
     return monkey.defense * 3 + monkey.attack + (monkey.species === "Gorila" || monkey.species === "Mandril" ? 8 : 0);
@@ -500,12 +547,13 @@ function attackArea(
 ): void {
   const previousOwner = area.ownerFactionId;
   const defenderFactionId =
-    previousOwner && previousOwner !== faction.id
+    previousOwner && previousOwner !== faction.id && isOfficialFactionId(previousOwner)
       ? previousOwner
       : state.monkeys.find(
           (monkey) =>
             monkey.locationId === area.id &&
             monkey.factionId !== faction.id &&
+            isOfficialFactionId(monkey.factionId) &&
             monkey.status !== "morto",
         )?.factionId ?? null;
   const defenders = defenderFactionId
@@ -578,7 +626,10 @@ function stealFood(
   members: Monkey[],
   report: DailyReport,
 ): void {
-  const targetFactionId = area.ownerFactionId && area.ownerFactionId !== faction.id ? area.ownerFactionId : state.playerFactionId;
+  const targetFactionId =
+    area.ownerFactionId && area.ownerFactionId !== faction.id && isOfficialFactionId(area.ownerFactionId)
+      ? area.ownerFactionId
+      : state.playerFactionId;
   const target = getFaction(state, targetFactionId);
   const stealth = members.reduce((sum, monkey) => sum + monkey.stealth + monkey.energy / 20, 0) + faction.stealthBias;
   const guards = livingFactionMonkeys(state, target.id).filter((monkey) => monkey.locationId === area.id);
@@ -628,7 +679,7 @@ function negotiateForFaction(
 ): void {
   const targetId = faction.id === GOLD_FACTION_ID
     ? state.playerFactionId
-    : state.factions.find((item) => !item.isPlayer && item.id !== faction.id && item.alive)?.id ?? state.playerFactionId;
+    : state.factions.find((item) => isActiveRivalFactionId(item.id) && item.id !== faction.id && item.alive)?.id ?? state.playerFactionId;
   const target = getFaction(state, targetId);
   const charisma = members.reduce((sum, monkey) => sum + monkey.charisma + monkey.morale / 20, 0) + faction.diplomacyBias;
   const delta = faction.id === STONE_FACTION_ID ? (charisma > 20 ? 2 : -2) : (charisma > 20 ? 6 : 3);
@@ -863,7 +914,7 @@ function executeFactionAction(
 
 export function resolveEnemyAI(state: GameState, report: DailyReport): void {
   state.factions
-    .filter((faction) => !faction.isPlayer && faction.alive)
+    .filter((faction) => isActiveRivalFactionId(faction.id) && faction.alive)
     .forEach((faction) => {
       const plans = decideFactionDailyPlans(state, faction.id);
       const reservedIds = new Set<string>();

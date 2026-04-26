@@ -1,5 +1,13 @@
 import { resolveEnemyAI } from "./ai";
-import { ACTION_ROLE_HINT, GROUP_ACTION_LABELS, PLAYER_NAMES, TOOLS } from "./constants";
+import {
+  ACTION_ROLE_HINT,
+  ACTIVE_RIVAL_FACTION_IDS,
+  GROUP_ACTION_LABELS,
+  PLAYER_NAMES,
+  TOOLS,
+  isActiveRivalFactionId,
+  isOfficialFactionId,
+} from "./constants";
 import { applyCombatConsequences, performPlayerCombatAction, type CombatActionRequest } from "./combat";
 import { applyHungerAndRecovery, regenerateAreaFood, resolveDailyBananaProduction, summarizeFactionRelations } from "./economy";
 import { generatePendingDecisions } from "./events";
@@ -210,9 +218,9 @@ function resolveGroupNegotiate(
   const targetFactionId =
     area.ownerFactionId && area.ownerFactionId !== state.playerFactionId
       ? area.ownerFactionId
-      : state.factions.find((faction) => !faction.isPlayer && faction.alive)?.id;
+      : state.factions.find((faction) => isActiveRivalFactionId(faction.id) && faction.alive)?.id;
 
-  if (!targetFactionId) {
+  if (!targetFactionId || !isActiveRivalFactionId(targetFactionId)) {
     report.rumors.push("Não havia ninguém disposto a negociar.");
     return;
   }
@@ -252,7 +260,7 @@ function resolveGroupSteal(
   const area = getArea(state, plan.areaId);
   const members = groupMembers(state, plan);
   const targetFactionId = area.ownerFactionId && area.ownerFactionId !== state.playerFactionId ? area.ownerFactionId : null;
-  if (!targetFactionId) {
+  if (!targetFactionId || !isActiveRivalFactionId(targetFactionId)) {
     report.suspicions.push(`O grupo tentou roubar em ${area.name}, mas não encontrou estoque rival.`);
     spendEnergy(members, 8);
     return;
@@ -420,7 +428,7 @@ function processRoleAssignments(state: GameState, report: DailyReport): void {
       }
     } else if (monkey.role === "Diplomata") {
       const target = state.factions
-        .filter((item) => !item.isPlayer && item.alive)
+        .filter((item) => isActiveRivalFactionId(item.id) && item.alive)
         .sort((a, b) => (b.relations[state.playerFactionId] ?? 0) - (a.relations[state.playerFactionId] ?? 0))[0];
       const stats = getMonkeyEffectiveStats(monkey, { action: "negotiate" });
       spendEnergy([monkey], 6);
@@ -448,6 +456,18 @@ function createCombatFromPlan(
             monkey.factionId !== state.playerFactionId &&
             monkey.status !== "morto",
         )?.factionId;
+
+  if (defenderFactionId && !isActiveRivalFactionId(defenderFactionId)) {
+    area.ownerFactionId = state.playerFactionId;
+    area.controlledByFactionId = state.playerFactionId;
+    attackers.forEach((monkey) => {
+      monkey.locationId = area.id;
+      monkey.energy = clamp(monkey.energy - 10, 0, monkey.maxEnergy);
+      updateMonkeyStatus(monkey);
+    });
+    report.confirmed.push(`O ataque encontrou ${area.name} sem facção rival oficial. A área foi ocupada.`);
+    return false;
+  }
 
   if (!defenderFactionId) {
     area.ownerFactionId = state.playerFactionId;
@@ -511,8 +531,8 @@ function createCombatFromEvent(
   const rivalId =
     enemyFactionId ??
     area.ownerFactionId ??
-    state.factions.find((faction) => !faction.isPlayer && faction.alive)?.id;
-  if (!rivalId || rivalId === state.playerFactionId) {
+    state.factions.find((faction) => isActiveRivalFactionId(faction.id) && faction.alive)?.id;
+  if (!rivalId || rivalId === state.playerFactionId || !isActiveRivalFactionId(rivalId)) {
     report.suspicions.push("O alerta hostil passou sem inimigos claros.");
     return false;
   }
@@ -619,11 +639,69 @@ function buildScore(state: GameState): GameOverInfo {
   };
 }
 
+function factionDailyNeed(state: GameState, factionId: string): number {
+  return livingFactionMonkeys(state, factionId).reduce((sum, monkey) => sum + monkey.foodConsumption, 0);
+}
+
+function factionFoodProduction(state: GameState, factionId: string): number {
+  return state.areas
+    .filter((area) => area.ownerFactionId === factionId)
+    .reduce((sum, area) => sum + area.currentBananaProduction, 0);
+}
+
+function operationalMonkeys(monkeys: Monkey[]): Monkey[] {
+  return monkeys.filter(
+    (monkey) =>
+      monkey.hp > 1 &&
+      monkey.energy > 8 &&
+      monkey.status !== "morto" &&
+      monkey.status !== "inconsciente" &&
+      monkey.status !== "exausto",
+  );
+}
+
+function rivalCannotSurvive(state: GameState, factionId: string): boolean {
+  const faction = state.factions.find((item) => item.id === factionId);
+  if (!faction || !faction.alive) {
+    return true;
+  }
+
+  const alive = livingFactionMonkeys(state, faction.id);
+  if (alive.length === 0) {
+    return true;
+  }
+
+  const needed = factionDailyNeed(state, faction.id);
+  const foodDays = foodTotal(faction) / Math.max(1, needed);
+  const production = factionFoodProduction(state, faction.id);
+  const operative = operationalMonkeys(alive);
+  return (
+    operative.length === 0 ||
+    (foodDays < 0.5 && production < Math.max(4, needed)) ||
+    (alive.length <= 2 && faction.morale < 25 && countTerritories(state, faction.id) <= 1)
+  );
+}
+
+function rivalIsWeakened(state: GameState, factionId: string): boolean {
+  if (rivalCannotSurvive(state, factionId)) {
+    return true;
+  }
+
+  const faction = getFaction(state, factionId);
+  const alive = livingFactionMonkeys(state, faction.id);
+  const foodDays = foodTotal(faction) / Math.max(1, factionDailyNeed(state, faction.id));
+  return alive.length <= 4 || faction.morale < 32 || foodDays < 1.2 || countTerritories(state, faction.id) <= 1;
+}
+
 function evaluateGameOver(state: GameState, report: DailyReport): GameOverInfo | null {
   const player = getFaction(state, state.playerFactionId);
   const alive = livingFactionMonkeys(state, state.playerFactionId);
   const leader = state.monkeys.find((monkey) => monkey.factionId === state.playerFactionId && monkey.isLeader);
-  const rivals = state.factions.filter((faction) => !faction.isPlayer && faction.alive);
+  const rivals = state.factions.filter((faction) => isActiveRivalFactionId(faction.id) && faction.alive);
+  const operative = operationalMonkeys(alive);
+  const playerNeed = factionDailyNeed(state, state.playerFactionId);
+  const playerFoodDays = foodTotal(player) / Math.max(1, playerNeed);
+  const averageHunger = average(alive.map((monkey) => monkey.hunger));
 
   if (!leader || leader.status === "morto" || leader.hp <= 0) {
     return {
@@ -635,34 +713,59 @@ function evaluateGameOver(state: GameState, report: DailyReport): GameOverInfo |
     };
   }
 
-  if (alive.length === 0 || alive.every((monkey) => monkey.status === "inconsciente" || monkey.status === "exausto")) {
+  if (alive.length === 0) {
+    return {
+      won: false,
+      title: "A tribo acabou",
+      narrative: "Nenhum macaco do jogador sobreviveu para carregar o nome da facção.",
+      score: 0,
+      lines: ["Derrota porque todos os macacos do jogador morreram."],
+    };
+  }
+
+  if (operative.length === 0 || alive.every((monkey) => monkey.status === "inconsciente" || monkey.status === "exausto")) {
     return {
       won: false,
       title: "A tribo perdeu a capacidade de agir",
       narrative: "Os poucos sobreviventes não conseguem mais defender estoque, território ou uns aos outros.",
       score: 0,
-      lines: ["Derrota por colapso da facção."],
+      lines: ["Derrota porque a facção do jogador ficou sem capacidade real de agir."],
     };
   }
 
-  if (rivals.length === 0) {
+  if (playerFoodDays < 0.35 && averageHunger > 82 && (player.deserters >= 2 || operative.length <= Math.ceil(alive.length / 3))) {
+    return {
+      won: false,
+      title: "Colapso da tribo",
+      narrative: "Fome, deserção e exaustão quebraram a organização antes que houvesse uma última ordem útil.",
+      score: 0,
+      lines: ["Derrota por fome, deserção e incapacidade operacional."],
+    };
+  }
+
+  const rivalsEliminatedOrUnable = ACTIVE_RIVAL_FACTION_IDS.every((factionId) => rivalCannotSurvive(state, factionId));
+  if (rivals.length === 0 || rivalsEliminatedOrUnable) {
     return {
       won: true,
       title: "A ilha reconhece um único clã",
-      narrative: "As facções rivais ruíram. Da copa ao mangue, todos sabem qual líder ainda está de pé.",
+      narrative: "Punho de Pedra e Fruto Dourado ruíram ou já não conseguem sobreviver. Da copa ao mangue, todos sabem qual líder ainda está de pé.",
       score: buildScore(state).score + 250,
-      lines: ["Vitória por eliminação das facções rivais."],
+      lines: ["Vitória por eliminação ou incapacidade das facções rivais oficiais."],
     };
   }
 
-  if (state.day > 10 && countTerritories(state, state.playerFactionId) >= 8) {
+  const totalFoodProduction = state.areas.reduce((sum, area) => sum + area.currentBananaProduction, 0);
+  const playerFoodProduction = factionFoodProduction(state, state.playerFactionId);
+  const dominatesFood = totalFoodProduction > 0 && playerFoodProduction / totalFoodProduction > 0.5;
+  const rivalsWeakened = ACTIVE_RIVAL_FACTION_IDS.every((factionId) => rivalIsWeakened(state, factionId));
+  if (state.day > 10 && dominatesFood && rivalsWeakened) {
     return {
       won: true,
       title: "Domínio das fontes de comida",
       narrative:
-        "A tribo controla a maior parte das áreas férteis. Os rivais ainda respiram, mas dependem de migalhas.",
+        "A tribo controla a maior parte das fontes de comida. Punho de Pedra e Fruto Dourado ainda respiram, mas estão fracos demais para sustentar uma disputa real.",
       score: buildScore(state).score + 180,
-      lines: ["Vitória por controle territorial e alimentar."],
+      lines: ["Vitória por domínio alimentar com rivais enfraquecidas."],
     };
   }
 
@@ -767,7 +870,7 @@ function applyDecisionEffect(
   }
 
   if (effect.type === "relation" && effect.factionId) {
-    if (!state.factions.some((faction) => faction.id === effect.factionId)) {
+    if (!isActiveRivalFactionId(effect.factionId) || !state.factions.some((faction) => faction.id === effect.factionId)) {
       return;
     }
     changeRelation(state, state.playerFactionId, effect.factionId, value);
@@ -856,6 +959,10 @@ export function finalizeDay(state: GameState, report: DailyReport): GameState {
   summarizeFactionRelations(state, report);
 
   state.factions.forEach((faction) => {
+    if (!isOfficialFactionId(faction.id)) {
+      faction.alive = false;
+      return;
+    }
     if (livingFactionMonkeys(state, faction.id).length === 0) {
       faction.alive = false;
     }

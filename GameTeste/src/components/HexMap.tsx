@@ -4,6 +4,7 @@ import {
   normalizeAreaId,
 } from "../game/map";
 import { ASSETS, factionFlag } from "../game/assets";
+import { isOfficialFactionId } from "../game/constants";
 import type { AreaId, GameState } from "../game/types";
 import { livingFactionMonkeys } from "../game/utils";
 
@@ -56,7 +57,9 @@ export default function HexMap({ state, selectedAreaId, onSelect }: Props) {
       </div>
       <div className="hex-map" aria-label="Mapa da ilha">
         {visualAreas.map((area) => {
-          const owner = state.factions.find((faction) => faction.id === area.ownerFactionId);
+          const owner = isOfficialFactionId(area.ownerFactionId)
+            ? state.factions.find((faction) => faction.id === area.ownerFactionId)
+            : undefined;
           const ownerIcon = factionFlag(area.ownerFactionId);
           const hasPlayerHere = playerMonkeys.some((monkey) => normalizeAreaId(monkey.locationId) === area.id);
           const playerCount = playerMonkeys.filter((monkey) => normalizeAreaId(monkey.locationId) === area.id).length;

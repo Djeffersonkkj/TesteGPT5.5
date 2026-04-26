@@ -251,7 +251,7 @@ export function getMonkeyEffectiveStats(monkey: Monkey, context: SkillContext = 
       "diplomacy",
     );
   }
-  if (context.action === "explore" || context.action === "flee" || context.action === "ambush") {
+  if (context.action === "explore" || context.action === "steal" || context.action === "flee" || context.action === "ambush") {
     stats = applyEffects(
       stats,
       skills.flatMap((skill) => skill.effects),
